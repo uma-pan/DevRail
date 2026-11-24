@@ -1,6 +1,5 @@
 (() => {
   'use strict';
-
   // =========================================================================
   // 1. 効果音（Web Audio API）
   // =========================================================================
@@ -74,7 +73,7 @@
     }
   }
 
-  const {
+    const {
     MUNICIPALITIES,
     EXISTING_STATIONS,
     EXISTING_LINES,
@@ -142,7 +141,7 @@
     const a = Math.hypot(x0, y0);
     const b = Math.hypot(x2, y2);
     const c = Math.hypot(x2 - x0, y2 - y0);
-    const area2 = Math.abs(x0 * y2 - y0 * x2);
+    const area2 = Math.abs(x0 * y2 - y0 * x2); // 2 * triangle area
     if (area2 < 1e-3 || a < 1 || b < 1 || c < 1) return 9999;
     return (a * b * c) / (2 * area2);
   }
@@ -154,9 +153,9 @@
     const vx = (p1Lng - p0Lng) * mLng;
     const vy = (p1Lat - p0Lat) * mLat;
     const dist = Math.hypot(vx, vy);
-    if (dist < 1) return { invalid: true, reason: '距離が短すぎます' };
+    if (dist < 1) return { invalid: true, reason: '同じ地点が選択されています' };
     const ux = vx / dist, uy = vy / dist;
-    const SAMPLES = 24;
+    const SAMPLES = Math.max(4, Math.min(18, Math.ceil(dist / 90)));
 
     if (!t0) {
       const coords = [];
@@ -173,7 +172,7 @@
     const alpha = Math.atan2(cross, dot);
     const absAlpha = Math.abs(alpha);
 
-    if (absAlpha > Math.PI * 0.52) {
+    if (absAlpha > Math.PI * 0.62) {
       return { invalid: true, reason: '折り返し角度が急すぎます（進行方向寄りに指定してください）' };
     }
     if (absAlpha < 0.04) {
@@ -187,8 +186,8 @@
 
     const sinA = Math.sin(absAlpha);
     const R = dist / (2 * sinA);
-    if (R < 140) {
-      return { invalid: true, reason: `曲線半径が急すぎます（R${Math.round(R)}m / 最小R140m）` };
+    if (R < 40) {
+      return { invalid: true, reason: `曲線半径が急すぎます（R${Math.round(R)}m / 最小R40m）` };
     }
 
     const sign = cross >= 0 ? 1 : -1;
@@ -247,10 +246,11 @@
     let roadSamples = 0;
     let waterSamples = 0;
     let buildingSamples = 0;
-    const step = fastPreview ? Math.max(1, Math.floor((coords.length - 2) / 7)) : Math.max(1, Math.floor((coords.length - 2) / 14));
+    const step = Math.max(1, Math.floor((coords.length - 2) / 6));
     let sampledCount = 0;
 
-    if (map && mapReady && cachedInfraLayers.length > 0) {
+    // プレビュー（mousemove）中は queryRenderedFeatures を一切呼ばず完全軽量化
+    if (!fastPreview && map && mapReady && cachedInfraLayers.length > 0) {
       try {
         const cw = map.getCanvas().clientWidth;
         const ch = map.getCanvas().clientHeight;
@@ -298,17 +298,17 @@
     const levelCrossings = structure === 'surface' ? majorRoadCrossings : 0;
     const roadUndergroundDiscount = structure === 'underground' && roadFollowRatio >= 0.30;
 
-    // 構造別の現実的な線路敷設コスト算出（億円・駅建設費は別）
+    // 構造別の現実的な線路敷設コスト算出（億円・短区間でも距離比例で適正化）
     const stDef = STRUCTURES[structure] || STRUCTURES.surface;
-    const baseTrackCost = (4 + lengthKm * 7.5) * stDef.costMult;
+    const baseTrackCost = (lengthKm * 10.5) * stDef.costMult;
     const landAcqCost = structure === 'underground'
-      ? muniPriceBase * 0.06
-      : (muniPriceBase * 0.14 + buildingDensity * lengthKm * 8.0);
-    const riverCost = hasRiver ? (structure === 'underground' ? 28 : 20) : 0;
-    const curveCost = minRadiusM < 250 ? 8 : 0;
+      ? lengthKm * muniPriceBase * 0.08
+      : lengthKm * (muniPriceBase * 0.20 + buildingDensity * 8.0);
+    const riverCost = hasRiver ? (structure === 'underground' ? 24 : 18) : 0;
+    const curveCost = minRadiusM < 200 ? Math.min(6, lengthKm * 6) : 0;
     let totalCost = baseTrackCost + landAcqCost + riverCost + curveCost;
     if (roadUndergroundDiscount) totalCost *= 0.80;
-    totalCost = Math.max(3, Math.round(totalCost));
+    totalCost = Math.max(0.5, Math.round(totalCost * 10) / 10);
 
     // 曲線半径＋地上踏切による区間実効制限速度
     const curveCap = speedLimitForRadius(minRadiusM);
@@ -360,7 +360,7 @@
     funds: 500.0,
     activeTab: 'route',
     buildMode: 'track', // 'track' | 'station' | null
-    selectedPoint: null,
+    selectedPoint: null, // { lat, lng, muni }
     selectedStationId: null,
     is25D: true,
     showSpeedHeat: true,
@@ -371,10 +371,10 @@
     hoverPreview: null,
     undoStack: [],
 
-    trackNodes: [],
-    myStations: [],
-    segments: [],
-    routePolyline: [],
+    trackNodes: [], // [{ id, lat, lng, costPaid }]
+    myStations: [], // [{ ..., routeKm }] (線路上に設置した駅・routeKm昇順)
+    segments: [], // [{ fromId, toId, structure, coords, lengthKm, startKm, endKm, minRadiusM, levelCrossings, hasRiver, maxSpeedKmh, roadUndergroundDiscount }]
+    routePolyline: [], // 列車走行用の連続曲線座標 [{ lng, lat, cumKm }]
     directAgreements: {},
     services: [
       { id: 'local',   name: '各停', color: '#38bdf8', speed: 42, freq: 6, enabled: true,  direct: false, surcharge: 0,   stops: {} },
@@ -403,7 +403,8 @@
 
   function createStationState({ id, name, lat, lng, hasPassing, existingId, zoning, routeKm }) {
     const muni = getNearestMunicipality(lat, lng);
-    const density = muni.pop / muni.area;
+    const density = muni.pop / muni.area; // 人/km²
+    // 駅勢圏（半径約1km ≈ 3.14km²）の実在人口ベース初期値
     const areaPop = Math.round(density * 2.65);
     const exBoost = existingId ? 16 : 0;
     return {
@@ -514,7 +515,13 @@
     if (state.segments.length > 0) {
       return state.segments.reduce((acc, sg) => acc + sg.lengthKm, 0);
     }
-    return 0;
+    let km = 0;
+    for (let i = 0; i < state.myStations.length - 1; i++) {
+      const a = state.myStations[i];
+      const b = state.myStations[i + 1];
+      km += haversineKm(a.lat, a.lng, b.lat, b.lng);
+    }
+    return km;
   }
 
   function recalculateSimulation(advanceGrowth) {
@@ -540,6 +547,7 @@
     const hasPassing = hasIntermediatePassingTrack();
     const activeServices = state.services.filter(s => s.enabled && s.freq > 0);
     const hasAnyDirectAgreement = getConnectedDirectStations().length > 0;
+
     const cumKm = state.myStations.map(st => st.routeKm || 0);
 
     const gateways = [];
@@ -672,6 +680,7 @@
         st.comm = Math.max(12, Math.min(100, st.comm + commDelta));
         st.landPrice = Math.max(18, Math.min(120, st.landPrice + (popDelta > 0 ? 0.18 : 0)));
 
+        // 沿線開発レベル（3D新規ビル群の高さ成長）
         if (growthDrive > 0) {
           st.devLevel = Math.min(100, st.devLevel + growthDrive * 3.2 * (lm ? 1.35 : 1.0));
         }
@@ -754,7 +763,7 @@
   }
 
   // =========================================================================
-  // 6. MapLibre GL JS 実在2.5Dマップ（軽量化チューニング済）
+  // 6. MapLibre GL JS 実在2.5Dマップ（Subway Builder風スタイル）
   // =========================================================================
   let map = null;
   let mapReady = false;
@@ -787,13 +796,13 @@
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: [139.555, 35.626],
       zoom: window.innerWidth >= 900 ? 12.2 : 11.8,
-      pitch: 50,
+      pitch: 35,
       bearing: -14,
       antialias: false,
-      pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+      pixelRatio: 1,
       fadeDuration: 0,
-      maxTileCacheSize: 48,
-      maxPitch: 65
+      maxTileCacheSize: 32,
+      maxPitch: 52
     });
 
     let fallbackTriggered = false;
@@ -810,6 +819,7 @@
 
     map.on('style.load', () => {
       clearTimeout(fallbackTimer);
+      // Subway Builder風のクリーンな建築模型トーンに実在3D建物を調整
       try {
         const styleObj = map.getStyle();
         const layers = (styleObj && styleObj.layers) || [];
@@ -818,20 +828,30 @@
         realBuildingLayerIds = [];
         layers.forEach(l => {
           const sl = l['source-layer'] || '';
-          if (sl === 'transportation' || sl === 'water' || sl === 'waterway' || sl === 'building') {
-            cachedInfraLayers.push(l.id);
+          const lid = l.id || '';
+          // 重い装飾・ラベル系レイヤーを非表示化して描画負荷を大幅削減
+          if (
+            sl === 'poi' || sl === 'housenumber' ||
+            lid.includes('poi') || lid.includes('housenumber') ||
+            lid.includes('aeroway') || lid.includes('waterway_label')
+          ) {
+            try { map.setLayoutProperty(lid, 'visibility', 'none'); } catch (_) {}
+            return;
+          }
+          // queryRenderedFeatures対象は主要な線・面レイヤーのみに絞る（casing/label/3D除外）
+          if (
+            (sl === 'transportation' || sl === 'water' || sl === 'waterway' || sl === 'building') &&
+            l.type !== 'symbol' && l.type !== 'fill-extrusion' &&
+            !lid.includes('casing') && !lid.includes('outline') && !lid.includes('label')
+          ) {
+            cachedInfraLayers.push(lid);
           }
           if (l.type === 'fill-extrusion') {
             has3D = true;
-            realBuildingLayerIds.push(l.id);
-            map.setLayerZoomRange(l.id, 13.8, 24);
-            map.setPaintProperty(l.id, 'fill-extrusion-color', [
-              'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 12],
-              0, '#f8fafc',
-              25, '#e2e8f0',
-              70, '#cbd5e1'
-            ]);
-            map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.88);
+            realBuildingLayerIds.push(lid);
+            map.setLayerZoomRange(lid, 15.2, 24);
+            map.setPaintProperty(lid, 'fill-extrusion-color', '#e2e8f0');
+            map.setPaintProperty(lid, 'fill-extrusion-opacity', 0.82);
           }
         });
         if (!has3D && styleObj && styleObj.sources && styleObj.sources.openmaptiles) {
@@ -840,16 +860,15 @@
             type: 'fill-extrusion',
             source: 'openmaptiles',
             'source-layer': 'building',
-            minzoom: 13.8,
+            minzoom: 15.2,
             paint: {
               'fill-extrusion-color': '#e2e8f0',
               'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 12],
               'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-              'fill-extrusion-opacity': 0.86
+              'fill-extrusion-opacity': 0.82
             }
           });
           realBuildingLayerIds.push('custom-real-buildings-3d');
-          cachedInfraLayers.push('custom-real-buildings-3d');
         }
       } catch (_) {}
 
@@ -865,8 +884,9 @@
         if (state.hoverPreview) clearPreviewTrack();
         return;
       }
+      if (map.isMoving()) return;
       const now = performance.now();
-      if (now - lastPreviewTs < 120) return;
+      if (now - lastPreviewTs < 65) return;
       lastPreviewTs = now;
       if (state.buildMode === 'track') {
         updateTrackHoverPreview(e.lngLat.lat, e.lngLat.lng);
@@ -883,6 +903,7 @@
       } else if (state.buildMode === 'station') {
         tryPlaceStationOnTrack(lat, lng);
       } else {
+        // 近い自社駅があればそれを選択
         let hitMy = null;
         let bestD = 0.65;
         state.myStations.forEach(st => {
@@ -914,13 +935,13 @@
         paint: {
           'line-color': ['get', 'color'],
           'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 3.5],
-          'line-opacity': 0.58,
+          'line-opacity': 0.55,
           'line-dasharray': [2.5, 1.8]
         }
       });
     }
 
-    // 2. 既存駅ドット＆ラベル（主要駅は常時、途中各駅はズーム12.2以上で表示）
+    // 2. 既存駅ドット
     if (!map.getSource('existing-stations')) {
       map.addSource('existing-stations', { type: 'geojson', data: buildExistingStationsGeoJSON() });
       map.addLayer({
@@ -971,7 +992,7 @@
       });
     }
 
-    // 3. 駅勢圏インパクトサークル
+    // 3. 駅勢圏インパクトサークル（Subway Builder風の赤い/青い駅エリア）
     if (!map.getSource('station-zones')) {
       map.addSource('station-zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
@@ -989,7 +1010,7 @@
       });
     }
 
-    // 4. 自社開発3Dビル＆大型ランドマーク
+    // 4. 自社開発による3D新規ビル群＆大型ランドマーク（fill-extrusion）
     if (!map.getSource('dev-buildings')) {
       map.addSource('dev-buildings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
@@ -1008,6 +1029,7 @@
     // 5. 自社路線（地上・高架・地下の構造別ビジュアル＋曲線線形）
     if (!map.getSource('my-track')) {
       map.addSource('my-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      // 高架用の立体シャドウ
       map.addLayer({
         id: 'my-track-elevated-shadow',
         type: 'line',
@@ -1020,6 +1042,7 @@
           'line-translate': [2, 4]
         }
       });
+      // 地上・高架ケーシング
       map.addLayer({
         id: 'my-track-casing',
         type: 'line',
@@ -1031,6 +1054,7 @@
           'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 10.5]
         }
       });
+      // 地上・高架本体
       map.addLayer({
         id: 'my-track-inner',
         type: 'line',
@@ -1042,6 +1066,7 @@
           'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 6.4]
         }
       });
+      // 地下シールド線（破線＋半透明）
       map.addLayer({
         id: 'my-track-underground-casing',
         type: 'line',
@@ -1116,7 +1141,7 @@
       });
     }
 
-    // 6. 走行中の自社列車
+    // 6. 走行中の自社列車（リアルタイムアニメーション）
     if (!map.getSource('my-trains')) {
       map.addSource('my-trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
@@ -1161,9 +1186,11 @@
     };
   }
 
-  function syncMapGeoJSON() {
+  function syncMapGeoJSON(opts = {}) {
     if (!mapReady || !map) return;
+    const updateTracks = opts.tracks !== false;
 
+    // 駅勢圏サークル
     const zoneFeatures = state.myStations.map(st => {
       const zColor = st.congestion > 130 ? '#ef4444' : (ZONINGS[st.zoning] ? ZONINGS[st.zoning].color : '#0ea5e9');
       return {
@@ -1176,47 +1203,52 @@
       map.getSource('station-zones').setData({ type: 'FeatureCollection', features: zoneFeatures });
     }
 
-    const trackFeatures = [];
-    const maxSpeed = Math.max(...state.services.filter(s => s.enabled).map(s => s.speed), 42);
-    const hasPassing = hasIntermediatePassingTrack();
+    // 自社路線（月次更新時は線路・ノードの再送信を省略して軽量化）
+    if (updateTracks) {
+      const trackFeatures = [];
+      const maxSpeed = Math.max(...state.services.filter(s => s.enabled).map(s => s.speed), 42);
+      const hasPassing = hasIntermediatePassingTrack();
 
-    for (let i = 0; i < state.segments.length; i++) {
-      const sg = state.segments[i];
-      let segColor = sg.structure === 'underground' ? '#38bdf8' : (sg.structure === 'elevated' ? '#0ea5e9' : '#06b6d4');
-      if (state.showSpeedHeat) {
-        const baseEff = maxSpeed > 45 && !hasPassing ? 42 + (maxSpeed - 42) * 0.35 : maxSpeed;
-        const effSpeed = Math.min(baseEff, sg.maxSpeedKmh);
-        if (effSpeed < 45) segColor = '#ef4444';
-        else if (effSpeed >= 70) segColor = '#22c55e';
-        else if (effSpeed >= 55) segColor = '#84cc16';
-        else segColor = '#f59e0b';
-      }
-      trackFeatures.push({
-        type: 'Feature',
-        properties: { color: segColor, structure: sg.structure },
-        geometry: { type: 'LineString', coordinates: sg.coords }
-      });
-    }
-    if (map.getSource('my-track')) {
-      map.getSource('my-track').setData({ type: 'FeatureCollection', features: trackFeatures });
-    }
-    if (map.getSource('my-track-nodes')) {
-      const activeIdx = state.activeEnd === 'start' ? 0 : state.trackNodes.length - 1;
-      map.getSource('my-track-nodes').setData({
-        type: 'FeatureCollection',
-        features: state.trackNodes.map((nd, idx) => ({
+      for (let i = 0; i < state.segments.length; i++) {
+        const sg = state.segments[i];
+        let segColor = sg.structure === 'underground' ? '#38bdf8' : (sg.structure === 'elevated' ? '#0ea5e9' : '#06b6d4');
+        if (state.showSpeedHeat) {
+          const baseEff = maxSpeed > 45 && !hasPassing ? 42 + (maxSpeed - 42) * 0.35 : maxSpeed;
+          const effSpeed = Math.min(baseEff, sg.maxSpeedKmh);
+          if (effSpeed < 45) segColor = '#ef4444';
+          else if (effSpeed >= 70) segColor = '#22c55e';
+          else if (effSpeed >= 55) segColor = '#84cc16';
+          else segColor = '#f59e0b';
+        }
+        trackFeatures.push({
           type: 'Feature',
-          properties: { id: nd.id, active: state.buildMode === 'track' && idx === activeIdx },
-          geometry: { type: 'Point', coordinates: [nd.lng, nd.lat] }
-        }))
-      });
+          properties: { color: segColor, structure: sg.structure },
+          geometry: { type: 'LineString', coordinates: sg.coords }
+        });
+      }
+      if (map.getSource('my-track')) {
+        map.getSource('my-track').setData({ type: 'FeatureCollection', features: trackFeatures });
+      }
+      if (map.getSource('my-track-nodes')) {
+        const activeIdx = state.activeEnd === 'start' ? 0 : state.trackNodes.length - 1;
+        map.getSource('my-track-nodes').setData({
+          type: 'FeatureCollection',
+          features: state.trackNodes.map((nd, idx) => ({
+            type: 'Feature',
+            properties: { id: nd.id, active: state.buildMode === 'track' && idx === activeIdx },
+            geometry: { type: 'Point', coordinates: [nd.lng, nd.lat] }
+          }))
+        });
+      }
     }
 
+    // 沿線開発3Dビル群＆大型ランドマーク（fill-extrusion）
     const bldgFeatures = [];
     state.myStations.forEach(st => {
       const z = ZONINGS[st.zoning] || ZONINGS.residential;
       const baseH = 22 + st.devLevel * 1.1 + (st.accessScore * 0.45);
 
+      // 駅前自動成長ビル（4ブロック）
       const offsets = [
         [110, 85, 42, 36, 1.0],
         [-115, 75, 38, 38, 0.85],
@@ -1226,18 +1258,31 @@
       offsets.forEach(([ox, oy, hw, hh, mult]) => {
         bldgFeatures.push({
           type: 'Feature',
-          properties: { color: z.color, height: Math.round(baseH * mult) },
-          geometry: { type: 'Polygon', coordinates: makeBuildingPolygon(st.lng, st.lat, hw, hh, ox, oy) }
+          properties: {
+            color: z.color,
+            height: Math.round(baseH * mult)
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: makeBuildingPolygon(st.lng, st.lat, hw, hh, ox, oy)
+          }
         });
       });
 
+      // 大型ランドマーク（存在する場合、ひときわ高い象徴的3Dタワー）
       if (st.landmark) {
         const lm = LANDMARKS.find(l => l.id === st.landmark);
         if (lm) {
           bldgFeatures.push({
             type: 'Feature',
-            properties: { color: lm.color, height: Math.round(115 + st.devLevel * 0.9) },
-            geometry: { type: 'Polygon', coordinates: makeBuildingPolygon(st.lng, st.lat, 62, 62, 0, 145) }
+            properties: {
+              color: lm.color,
+              height: Math.round(115 + st.devLevel * 0.9)
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: makeBuildingPolygon(st.lng, st.lat, 62, 62, 0, 145)
+            }
           });
         }
       }
@@ -1311,7 +1356,7 @@
   }
 
   // =========================================================================
-  // 7. UI レンダリング（HUD & 4タブパネル）
+  // 7. UI レンダリング（HUD & 下部4タブパネル）
   // =========================================================================
   function showToast(msg) {
     const box = document.getElementById('toast-box');
@@ -1343,11 +1388,11 @@
     const bannerText = document.getElementById('mode-banner-text');
     const structBar = document.getElementById('struct-bar');
     const undoBtn = document.getElementById('btn-undo-node');
-    const switchEndBtn = document.getElementById('btn-switch-end');
     const mapWrap = document.getElementById('map-wrapper');
     if (state.buildMode === 'track') {
       banner.classList.remove('hidden');
       if (structBar) structBar.classList.remove('hidden');
+      const switchEndBtn = document.getElementById('btn-switch-end');
       if (switchEndBtn) {
         switchEndBtn.classList.toggle('hidden', state.trackNodes.length < 2);
         switchEndBtn.textContent = state.activeEnd === 'start' ? '延伸端: 始点側' : '延伸端: 終点側';
@@ -1362,6 +1407,7 @@
     } else if (state.buildMode === 'station') {
       banner.classList.remove('hidden');
       if (structBar) structBar.classList.add('hidden');
+      const switchEndBtn = document.getElementById('btn-switch-end');
       if (switchEndBtn) switchEndBtn.classList.add('hidden');
       if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
       if (mapWrap) mapWrap.classList.add('extend-cursor');
@@ -1384,10 +1430,11 @@
     const titleEl = document.getElementById('chip-title');
     const subEl = document.getElementById('chip-sub');
     if (state.myStations.length === 0) {
-      titleEl.textContent = state.trackNodes.length < 2 ? 'まずは線路を敷設' : '線路上に駅を設置';
-      subEl.textContent = state.trackNodes.length < 2
-        ? 'マップをクリックして自由な曲線線形を敷設（地上／高架／地下）'
-        : `敷設済み ${getLineLengthKm().toFixed(1)}km — 「駅を設置」で2駅以上置くと開通`;
+      if (state.selectedPoint) {
+        const m = state.selectedPoint.muni;
+        titleEl.textContent = '新規路線を敷設しよう';
+        subEl.textContent = `マップをタップして1駅目を建設（例: 二子玉川・調布・登戸付近）`;
+      }
       return;
     }
     const st = state.myStations.find(s => s.id === state.selectedStationId);
@@ -1395,7 +1442,7 @@
       const directTag = st.existingId && state.directAgreements[st.existingId] ? ' [直通中]' : '';
       titleEl.textContent = `${st.name}駅${directTag} (${st.muniName})`;
       subEl.textContent = state.myStations.length < 2
-        ? '2駅目を設置すると運行が開始されます'
+        ? '2駅目を建設すると運行が開始されます'
         : `都心体感 ${st.hubTime}分 / 乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 / 混雑 ${st.congestion}%`;
       return;
     }
@@ -1420,7 +1467,7 @@
       return {
         step: 1, total: 6,
         title: 'まずは線路（線形）を引こう',
-        desc: 'マップ上で始点をクリックし、次の地点をクリックして直線・円弧で線路を敷設します。既存区間は変形せず、Ctrl+Zでいつでも取り消せます。',
+        desc: 'マップ上で始点と経由点を次々クリックして自由な線形を引けます。地上／高架／地下を切り替えながら、道路や河川に合わせて敷設してみよう！',
         ctaLabel: state.buildMode === 'track' ? null : '線路を引く',
         ctaAction: 'tut-start-track'
       };
@@ -1429,7 +1476,7 @@
       return {
         step: 2, total: 6,
         title: '線路上に駅を2つ以上設置しよう',
-        desc: '「駅を設置」モードに切り替えて、引いた線路の上をクリック。2駅以上置くと列車が走り始めます（既存駅付近は自動接続）。',
+        desc: '「駅を設置」モードに切り替えて、引いた線路の上をクリック！2駅以上置くと列車が走り始めます（既存駅付近は自動接続）。',
         ctaLabel: state.buildMode === 'station' ? null : '駅を設置する',
         ctaAction: 'tut-start-station'
       };
@@ -1438,7 +1485,7 @@
       return {
         step: 3, total: 6,
         title: '3駅目を設置して沿線を広げよう',
-        desc: 'さらに線路を伸ばすか、途中に3駅目を設置してみよう。中間駅ができると待避線や急行の追い越しが活きてきます。',
+        desc: 'さらに線路を伸ばすか、途中に3駅目を設置してみよう。中間駅ができると待避線や急行の追い越しが活きてきます！',
         ctaLabel: state.buildMode === 'station' ? null : '3駅目を設置',
         ctaAction: 'tut-start-station'
       };
@@ -1449,7 +1496,7 @@
         step: 4, total: 6,
         title: '既存路線と直通運転協定を結ぼう',
         desc: hasConn
-          ? '「路線・駅」タブの「協定締結」ボタンを押すと、都心への乗換ペナルティ（10分）が0分になり乗客が急増します。'
+          ? '「路線・駅」タブの「協定締結」ボタンを押すと、都心への乗換ペナルティ（10分）が0分になり乗客が急増します！'
           : '既存駅（白丸）の近くに延伸すると直通運転協定を結べます。今はスキップして次へ進むこともできます。',
         ctaLabel: hasConn ? '路線・駅タブを開く' : 'このステップをスキップ',
         ctaAction: hasConn ? 'tut-go-route' : 'tut-skip-direct'
@@ -1461,7 +1508,7 @@
         title: '待避線＆急行でスピードアップ',
         desc: !hasPassing
           ? '中間駅を選んで「待避線拡張 (35億)」を行うと、急行・特急が各停を追い抜いて100%の速度を発揮できます。'
-          : '「種別・直通」タブで準急・急行・特急をONにして、通過駅（｜）を設定してみよう。',
+          : '「種別・直通」タブで準急・急行・特急をONにして、通過駅（｜）を設定してみよう！',
         ctaLabel: !hasPassing ? '路線・駅タブを開く' : '種別・直通タブを開く',
         ctaAction: !hasPassing ? 'tut-go-route' : 'tut-go-service'
       };
@@ -1470,7 +1517,7 @@
       return {
         step: 6, total: 6,
         title: '沿線開発＆大型ランドマーク建設',
-        desc: '「沿線開発」タブで駅ごとの開発方針を選び、商業ビルやタワマンなどの大型ランドマークを1つ建てて街を育てよう。',
+        desc: '「沿線開発」タブで駅ごとの開発方針を選び、商業ビルやタワマンなどの大型ランドマークを1つ建てて街を育てよう！',
         ctaLabel: state.activeTab === 'dev' ? null : '沿線開発タブを開く',
         ctaAction: 'tut-go-dev'
       };
@@ -1478,7 +1525,7 @@
     return {
       step: 7, total: 6, done: true,
       title: 'チュートリアル完了',
-      desc: '基本操作をマスターしました。自由に路線を延伸し、黒字経営と沿線人口の拡大を目指してください。'
+      desc: '基本操作をマスターしました！自由に路線を延伸し、黒字経営と沿線人口の拡大を目指そう。'
     };
   }
 
@@ -1538,7 +1585,7 @@
       container.innerHTML = `
         <div class="mb-3">
           <div class="text-xs md:text-base font-extrabold text-white">新線建設プロジェクト（線路 ${km.toFixed(1)}km）</div>
-          <div class="text-[10px] md:text-xs text-slate-400 mt-0.5">1. 線路を引く → 2. 線路上に駅を設置する（Ctrl+Zで取り消し可）</div>
+          <div class="text-[10px] md:text-xs text-slate-400 mt-0.5">① 線路を引く → ② 線路上に駅を設置する</div>
         </div>
         <div class="grid grid-cols-2 gap-2 mb-3">
           <button data-action="mode-track" class="py-2 px-3 rounded-xl text-xs md:text-sm font-bold cursor-pointer border ${state.buildMode === 'track' ? 'bg-sky-600 border-sky-300 text-white shadow' : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'}">
@@ -1562,7 +1609,7 @@
           <div class="text-[10px] md:text-xs text-slate-400 mt-1">${STRUCTURES[state.buildStructure].desc}</div>
         </div>
         <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-xs md:text-sm text-slate-300 space-y-1.5 leading-relaxed">
-          <p>${state.trackNodes.length < 2 ? 'マップ上で始点をクリックし、次の地点を指定して直線・円弧で線路を敷設してください。' : '線路が敷設されました。「駅を設置」を押して線路上に駅を2つ以上置くと開通します。'}</p>
+          <p>${state.trackNodes.length < 2 ? 'マップ上で始点と経由点をクリックして自由な線形を引いてください。' : '線路が敷設されました！「駅を設置」を押して線路上に駅を2つ以上置くと開通します。'}</p>
           <p class="text-[11px] md:text-xs text-amber-300">既存駅（白丸）の近くを通るように線路を引き、駅を置くと直通運転協定を結べます。</p>
         </div>
       `;
@@ -1616,7 +1663,7 @@
         <div class="flex items-center justify-between gap-2">
           <div>
             <div class="text-xs md:text-sm font-bold text-sky-300">選択駅: ${st.name}駅</div>
-            <div class="text-[10px] md:text-xs text-slate-300 mt-1">${n < 2 ? '開業準備中（2駅目を設置してください）' : `都心体感 <strong class="text-white">${st.hubTime}分</strong> ・乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 ・混雑 ${st.congestion}%`}</div>
+            <div class="text-[10px] md:text-xs text-slate-300 mt-1">${n < 2 ? '開業準備中（2駅目を建設してください）' : `都心体感 <strong class="text-white">${st.hubTime}分</strong> ・乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 ・混雑 ${st.congestion}%`}</div>
           </div>
           ${st.hasPassing
             ? `<span class="text-[10px] md:text-xs font-bold px-2.5 py-1 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 shrink-0">2面4線 済</span>`
@@ -1651,9 +1698,9 @@
               <div class="flex items-center justify-between bg-slate-800/60 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[10px] md:text-xs">
                 <span class="font-bold text-slate-200 truncate pr-2">[${stf.tag}] 区間${idx + 1} (${sg.lengthKm.toFixed(1)}km)</span>
                 <div class="flex items-center gap-2 shrink-0 tabular-nums">
-                  <span class="${sg.minRadiusM < 250 ? 'text-rose-400 font-bold' : (sg.minRadiusM < 450 ? 'text-amber-300' : 'text-emerald-400')}">${sg.minRadiusM >= 1900 ? '直線' : `R${sg.minRadiusM}m`}</span>
+                  <span class="${sg.minRadiusM < 250 ? 'text-rose-400 font-bold' : (sg.minRadiusM < 450 ? 'text-amber-300' : 'text-emerald-400')}">R${sg.minRadiusM}m</span>
                   <span class="text-slate-300">上限${sg.maxSpeedKmh}km/h</span>
-                  ${sg.levelCrossings > 0 ? `<span class="text-rose-400 font-bold">踏切x${sg.levelCrossings}</span>` : ''}
+                  ${sg.levelCrossings > 0 ? `<span class="text-rose-400 font-bold">踏切×${sg.levelCrossings}</span>` : ''}
                   ${sg.hasRiver ? `<span class="text-sky-300">橋梁</span>` : ''}
                 </div>
               </div>`;
@@ -1679,7 +1726,7 @@
     if (state.myStations.length < 2) {
       container.innerHTML = `
         <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
-          2駅以上を設置すると、種別（各停・準急・急行・特急）の運行本数や停車駅、直通運転を設定できるようになります。
+          2駅以上を線路で繋ぐと、種別（各停・準急・急行・特急）の運行本数や停車駅、直通運転を設定できるようになります。
         </div>`;
       return;
     }
@@ -1753,7 +1800,7 @@
     if (!st) {
       container.innerHTML = `
         <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
-          駅を設置すると、駅ごとの開発方針（ゾーニング）や大型ランドマークの建設ができるようになります。
+          駅を建設すると、駅ごとの開発方針（ゾーニング）や大型ランドマークの建設ができるようになります。
         </div>`;
       return;
     }
@@ -1911,7 +1958,7 @@
   }
 
   // =========================================================================
-  // 8. プレイヤー操作ハンドラ（Train World方式・接線連続円弧＆Ctrl+Z）
+  // 8. プレイヤー操作ハンドラ
   // =========================================================================
   function clearPreviewTrack() {
     if (map && mapReady && map.getSource('preview-track')) {
@@ -1960,8 +2007,8 @@
     const { anchor, tangent } = getActiveAnchorAndTangent();
     const distKm = haversineKm(anchor.lat, anchor.lng, targetLat, targetLng);
 
-    if (distKm < 0.20) {
-      return { valid: false, reason: '始点に近すぎます（200m以上離してください）' };
+    if (distKm < 0.005) {
+      return { valid: false, reason: '同じ地点が選択されています' };
     }
     if (distKm > 10.0) {
       return { valid: false, reason: '1区間が長すぎます（10km以内で指定してください）' };
@@ -2262,7 +2309,7 @@
     }
     if (box) {
       box.classList.remove('hidden');
-      const snapTxt = cand.nearEx ? `<span class="text-amber-300 font-bold">[接続可] ${cand.nearEx.name}駅</span> ・ ` : '';
+      const snapTxt = cand.nearEx ? `<span class="text-amber-300 font-bold">[接続可] ${cand.nearEx.name}駅</span> ・` : '';
       box.innerHTML = `${snapTxt}${cand.muni.name}に新駅を設置 ・建設費 <strong class="${okFunds ? 'text-amber-300' : 'text-rose-400'}">${cand.cost}億円</strong>`;
     }
   }
@@ -2339,7 +2386,6 @@
       state.buildMode = state.buildMode === 'track' ? null : 'track';
       playSfx('tap');
       clearPreviewTrack();
-      syncMapGeoJSON();
       updateHUD();
       renderPanel();
     } else if (action === 'mode-station') {
@@ -2351,7 +2397,6 @@
       state.buildMode = state.buildMode === 'station' ? null : 'station';
       playSfx('tap');
       clearPreviewTrack();
-      syncMapGeoJSON();
       updateHUD();
       renderPanel();
     } else if (action === 'select-station') {
@@ -2376,7 +2421,7 @@
       state.funds = Math.round((state.funds - 35) * 10) / 10;
       st.hasPassing = true;
       playSfx('build');
-      showToast(`${st.name}駅を2面4線（待避線付き）に拡張しました`);
+      showToast(`${st.name}駅を2面4線（待避線付き）に拡張！`);
       recalculateSimulation(false);
       syncMapGeoJSON();
       syncStationMarkers();
@@ -2459,7 +2504,7 @@
       if (!st) return;
       st.zoning = btn.dataset.zoning;
       playSfx('tap');
-      showToast(`${st.name}駅周辺を「${ZONINGS[st.zoning].name}」に変更しました`);
+      showToast(`${st.name}駅周辺を「${ZONINGS[st.zoning].name}」に変更`);
       recalculateSimulation(false);
       syncMapGeoJSON();
       updateHUD();
@@ -2482,7 +2527,7 @@
       st.areaPop += lm.popAdd;
       st.comm = Math.min(100, st.comm + lm.commAdd);
       st.devLevel = Math.min(100, st.devLevel + 18);
-      if (map) map.easeTo({ center: [st.lng, st.lat], zoom: Math.max(map.getZoom(), 14.2), pitch: 50, duration: 500 });
+      if (map) map.easeTo({ center: [st.lng, st.lat], zoom: Math.max(map.getZoom(), 14.2), pitch: 58, duration: 500 });
       playSfx('build');
       showToast(`${st.name}駅前に「${lm.name}」が開業しました`);
       recalculateSimulation(false);
@@ -2501,7 +2546,6 @@
       state.activeTab = btn.dataset.tab;
       if (state.activeTab !== 'route') state.buildMode = null;
       playSfx('tap');
-      syncMapGeoJSON();
       updateHUD();
       renderPanel();
     });
@@ -2540,7 +2584,6 @@
       b.classList.toggle('active', b.dataset.tab === tabName);
     });
     if (tabName !== 'route') state.buildMode = null;
-    syncMapGeoJSON();
     updateHUD();
     renderPanel();
   }
@@ -2556,13 +2599,11 @@
     } else if (act === 'tut-start-track') {
       switchTab('route');
       state.buildMode = 'track';
-      syncMapGeoJSON();
       updateHUD();
       renderPanel();
     } else if (act === 'tut-start-station') {
       switchTab('route');
       state.buildMode = 'station';
-      syncMapGeoJSON();
       updateHUD();
       renderPanel();
     } else if (act === 'tut-go-route') {
@@ -2586,7 +2627,6 @@
   });
   document.getElementById('btn-cancel-mode').addEventListener('click', () => {
     state.buildMode = null;
-    syncMapGeoJSON();
     updateHUD();
     renderPanel();
   });
@@ -2612,7 +2652,7 @@
     state.is25D = !state.is25D;
     e.currentTarget.textContent = state.is25D ? '2.5D' : '2D';
     if (map) {
-      map.easeTo({ pitch: state.is25D ? 50 : 0, bearing: state.is25D ? -14 : 0, duration: 350 });
+      map.easeTo({ pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0, duration: 350 });
       realBuildingLayerIds.forEach(lid => {
         try { map.setLayoutProperty(lid, 'visibility', state.is25D ? 'visible' : 'none'); } catch (_) {}
       });
@@ -2627,7 +2667,7 @@
     playSfx('tap');
   });
   document.getElementById('btn-center').addEventListener('click', () => {
-    if (map) map.easeTo({ center: [139.535, 35.626], zoom: 12.1, pitch: state.is25D ? 50 : 0, bearing: state.is25D ? -14 : 0, duration: 450 });
+    if (map) map.easeTo({ center: [139.535, 35.626], zoom: 12.1, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -16 : 0, duration: 450 });
     playSfx('tap');
   });
 
@@ -2642,7 +2682,7 @@
     const dt = Math.min(0.1, (ts - lastFrameTime) / 1000);
     lastFrameTime = ts;
 
-    if (state.speed > 0) {
+    if (state.speed > 0 && !document.hidden) {
       const maxSeg = Math.max(1, state.myStations.length - 1);
       if (state.trains.length > 0) {
         state.trains.forEach(tr => {
@@ -2651,7 +2691,7 @@
           if (tr.progress >= maxSeg) { tr.progress = maxSeg; tr.dir = -1; }
           else if (tr.progress <= 0) { tr.progress = 0; tr.dir = 1; }
         });
-        if (ts - lastTrainRenderTs >= 80) {
+        if (ts - lastTrainRenderTs >= 140) {
           lastTrainRenderTs = ts;
           updateTrainGeoJSON();
         }
@@ -2664,7 +2704,7 @@
         if (state.month > 12) { state.month = 1; state.year += 1; }
         recalculateSimulation(true);
         recordHistory();
-        syncMapGeoJSON();
+        if (state.myStations.length > 0) syncMapGeoJSON({ tracks: false });
         playSfx('month');
         updateHUD();
         if (state.activeTab === 'finance') renderPanel();
@@ -2701,7 +2741,6 @@
         helpModal.classList.add('hidden');
       } else if (state.buildMode) {
         state.buildMode = null;
-        syncMapGeoJSON();
         updateHUD();
         renderPanel();
       }
