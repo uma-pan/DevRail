@@ -244,9 +244,18 @@
       <div id="toast-box"></div>
 
       <!-- モードバナー（延伸モード中） -->
-      <div id="mode-banner" class="hidden absolute top-2.5 left-2.5 right-16 md:right-auto md:max-w-lg bg-sky-600/95 text-white text-xs md:text-sm font-semibold px-3 md:px-4 py-1.5 md:py-2 rounded-lg shadow-lg flex items-center justify-between gap-3 z-20">
-        <span id="mode-banner-text">実在マップをタップして新駅・線路を延伸</span>
-        <button id="btn-cancel-mode" class="bg-slate-900/40 hover:bg-slate-900/60 px-2.5 py-1 rounded text-[11px] md:text-xs shrink-0 cursor-pointer">終了</button>
+      <div id="mode-banner" class="hidden absolute top-2.5 left-2.5 right-14 md:right-auto md:max-w-xl bg-slate-900/92 border border-sky-500/60 backdrop-blur text-white text-xs md:text-sm font-semibold px-3 md:px-3.5 py-2 rounded-xl shadow-lg flex flex-col gap-1.5 z-20">
+        <div class="flex items-center justify-between gap-3">
+          <span id="mode-banner-text" class="text-sky-200 font-bold">マップをクリック／タップして新駅・線路を延伸</span>
+          <button id="btn-cancel-mode" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-0.5 rounded text-[11px] md:text-xs shrink-0 cursor-pointer">終了</button>
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-[10px] md:text-xs text-slate-400">構造:</span>
+          <button data-struct="surface" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">🛤️ 地上</button>
+          <button data-struct="elevated" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">🌉 高架</button>
+          <button data-struct="underground" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">🚇 地下</button>
+        </div>
+        <div id="align-preview-box" class="hidden text-[10px] md:text-xs bg-slate-950/80 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-200 leading-snug"></div>
       </div>
 
       <!-- マップ右上フローティング操作（Subway Builder風ライトグラス） -->
@@ -266,8 +275,9 @@
 
       <!-- 右下：Subway Builder風ミニ凡例 -->
       <div id="map-legend" class="absolute bottom-2 right-2 bg-white/92 border border-slate-300/80 px-2 py-1 rounded-lg text-[9px] text-slate-700 flex flex-col gap-0.5 z-10 pointer-events-none shadow-sm">
-        <div class="flex items-center gap-1"><span class="inline-block w-2.5 h-1 bg-emerald-500 rounded"></span>自社線/速度</div>
-        <div class="flex items-center gap-1"><span class="inline-block w-2.5 h-1 bg-pink-500 rounded"></span>既存他社線</div>
+        <div class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-emerald-500 rounded"></span>地上/高架(速度)</div>
+        <div class="flex items-center gap-1"><span class="inline-block w-3 h-0 border-t-2 border-dashed border-sky-600"></span>地下(シールド)</div>
+        <div class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-pink-500 rounded"></span>既存他社線</div>
         <div class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-amber-500 bg-amber-300/40"></span>直通可</div>
       </div>
     </main>
@@ -438,13 +448,59 @@
   ];
 
   const EXISTING_LINES = [
-    { name: '京王線', color: '#db2777', stations: ['ex_shinjuku', 'ex_tsutsuji', 'ex_chofu', 'ex_tobitakyu', 'ex_fuchu'] },
-    { name: '京王相模原線', color: '#ec4899', stations: ['ex_chofu', 'ex_inagi', 'ex_wakabadai', 'ex_tamacenter'] },
-    { name: '小田急線', color: '#2563eb', stations: ['ex_shinjuku', 'ex_noborito', 'ex_shinyuri', 'ex_machida'] },
-    { name: '小田急多摩線', color: '#3b82f6', stations: ['ex_shinyuri', 'ex_tamacenter'] },
-    { name: '東急田園都市線', color: '#16a34a', stations: ['ex_shibuya', 'ex_yoga', 'ex_futako'] },
-    { name: 'JR南武線', color: '#eab308', stations: ['ex_fuchu', 'ex_inagi', 'ex_noborito', 'ex_futako'] }
+    {
+      name: '京王線', color: '#db2777',
+      coords: [
+        [139.7005, 35.6900], [139.6690, 35.6762], [139.6505, 35.6685],
+        [139.6010, 35.6682], [139.5750, 35.6581], [139.5441, 35.6518],
+        [139.5233, 35.6602], [139.5030, 35.6680], [139.4803, 35.6721]
+      ]
+    },
+    {
+      name: '京王相模原線', color: '#ec4899',
+      coords: [
+        [139.5441, 35.6518], [139.5320, 35.6442], [139.5260, 35.6352],
+        [139.4995, 35.6360], [139.4725, 35.6193], [139.4480, 35.6225], [139.4229, 35.6240]
+      ]
+    },
+    {
+      name: '小田急線', color: '#2563eb',
+      coords: [
+        [139.7005, 35.6900], [139.6672, 35.6615], [139.6340, 35.6485],
+        [139.5990, 35.6398], [139.5790, 35.6318], [139.5700, 35.6208],
+        [139.5648, 35.6173], [139.5315, 35.6122], [139.5078, 35.6039],
+        [139.4785, 35.5815], [139.4454, 35.5435]
+      ]
+    },
+    {
+      name: '小田急多摩線', color: '#3b82f6',
+      coords: [
+        [139.5078, 35.6039], [139.4890, 35.6062], [139.4685, 35.6140],
+        [139.4470, 35.6208], [139.4229, 35.6240]
+      ]
+    },
+    {
+      name: '東急田園都市線', color: '#16a34a',
+      coords: [
+        [139.7011, 35.6586], [139.6708, 35.6436], [139.6445, 35.6318],
+        [139.6339, 35.6264], [139.6268, 35.6114], [139.6120, 35.5998]
+      ]
+    },
+    {
+      name: 'JR南武線', color: '#eab308',
+      coords: [
+        [139.4803, 35.6721], [139.4775, 35.6660], [139.4950, 35.6470],
+        [139.5015, 35.6410], [139.5330, 35.6335], [139.5700, 35.6208],
+        [139.5890, 35.6115], [139.6105, 35.6005], [139.6268, 35.6114]
+      ]
+    }
   ];
+
+  const STRUCTURES = {
+    surface:     { id: 'surface',     name: '地上', icon: '🛤️', costMult: 1.0,  upkeepMult: 1.0,  desc: '最安。幹線道路交差で踏切発生・建物密集地は用地費増' },
+    elevated:    { id: 'elevated',    name: '高架', icon: '🌉', costMult: 1.48, upkeepMult: 1.25, desc: '連続立体交差で踏切ゼロ。建物密集地は用地買収が必要' },
+    underground: { id: 'underground', name: '地下', icon: '🚇', costMult: 2.15, upkeepMult: 1.55, desc: '用地買収不要＆踏切ゼロ。既存道路下を通すとシールド割引-20%' }
+  };
 
   const ZONINGS = {
     residential: { id: 'residential', name: '住宅重視', color: '#f59e0b', desc: '人口流入+35% / 朝夕通勤需要UP', popMult: 1.35, commMult: 0.9 },
@@ -500,6 +556,223 @@
     return best;
   }
 
+  // 局所平面メートル座標変換（基準緯度）
+  function toLocalMeters(lng, lat, refLng, refLat) {
+    const mLat = 111320;
+    const mLng = 111320 * Math.cos(refLat * Math.PI / 180);
+    return [(lng - refLng) * mLng, (lat - refLat) * mLat];
+  }
+
+  function fromLocalMeters(x, y, refLng, refLat) {
+    const mLat = 111320;
+    const mLng = 111320 * Math.cos(refLat * Math.PI / 180);
+    return [refLng + x / mLng, refLat + y / mLat];
+  }
+
+  // 3点を通る円の半径（Menger曲率半径・メートル）
+  function calcRadiusMeters(p0, p1, p2) {
+    const refLng = p1[0], refLat = p1[1];
+    const [x0, y0] = toLocalMeters(p0[0], p0[1], refLng, refLat);
+    const [x2, y2] = toLocalMeters(p2[0], p2[1], refLng, refLat);
+    const a = Math.hypot(x0, y0);
+    const b = Math.hypot(x2, y2);
+    const c = Math.hypot(x2 - x0, y2 - y0);
+    const area2 = Math.abs(x0 * y2 - y0 * x2); // 2 * triangle area
+    if (area2 < 1e-3 || a < 1 || b < 1 || c < 1) return 9999;
+    return (a * b * c) / (2 * area2);
+  }
+
+  // Catmull-Rom / Cubic Hermite による滑らかな鉄道線形（駅列全体から各区間の曲線点列を生成）
+  function computeRouteCurves(stations) {
+    const n = stations.length;
+    if (n < 2) return [];
+    const refLng = stations[0].lng;
+    const refLat = stations[0].lat;
+    const pts = stations.map(s => toLocalMeters(s.lng, s.lat, refLng, refLat));
+
+    // 各駅の接線ベクトル（連続した滑らかな線形を作る）
+    const tangents = [];
+    for (let i = 0; i < n; i++) {
+      let tx = 0, ty = 0;
+      if (i === 0) {
+        tx = pts[1][0] - pts[0][0];
+        ty = pts[1][1] - pts[0][1];
+      } else if (i === n - 1) {
+        tx = pts[n - 1][0] - pts[n - 2][0];
+        ty = pts[n - 1][1] - pts[n - 2][1];
+      } else {
+        // 前後区間の単位方向ベクトルを平均（距離差が大きくても自然な線形になる）
+        const dx1 = pts[i][0] - pts[i - 1][0], dy1 = pts[i][1] - pts[i - 1][1];
+        const l1 = Math.hypot(dx1, dy1) || 1;
+        const dx2 = pts[i + 1][0] - pts[i][0], dy2 = pts[i + 1][1] - pts[i][1];
+        const l2 = Math.hypot(dx2, dy2) || 1;
+        tx = dx1 / l1 + dx2 / l2;
+        ty = dy1 / l1 + dy2 / l2;
+        if (Math.hypot(tx, ty) < 1e-4) { tx = dx2 / l2; ty = dy2 / l2; }
+      }
+      const len = Math.hypot(tx, ty) || 1;
+      tangents.push([tx / len, ty / len]);
+    }
+
+    const curves = [];
+    const SAMPLES = 24;
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = pts[i], p1 = pts[i + 1];
+      const segDist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+      const handle = segDist * 0.34;
+      const t0 = [tangents[i][0] * handle * 3, tangents[i][1] * handle * 3];
+      const t1 = [tangents[i + 1][0] * handle * 3, tangents[i + 1][1] * handle * 3];
+
+      const coords = [];
+      let arcM = 0;
+      let prev = null;
+      for (let s = 0; s <= SAMPLES; s++) {
+        const u = s / SAMPLES;
+        const u2 = u * u, u3 = u2 * u;
+        const h00 = 2 * u3 - 3 * u2 + 1;
+        const h10 = u3 - 2 * u2 + u;
+        const h01 = -2 * u3 + 3 * u2;
+        const h11 = u3 - u2;
+        const x = h00 * p0[0] + h10 * t0[0] + h01 * p1[0] + h11 * t1[0];
+        const y = h00 * p0[1] + h10 * t0[1] + h01 * p1[1] + h11 * t1[1];
+        if (prev) arcM += Math.hypot(x - prev[0], y - prev[1]);
+        prev = [x, y];
+        coords.push(fromLocalMeters(x, y, refLng, refLat));
+      }
+
+      // 最小曲線半径（m）を算出
+      let minR = 9999;
+      for (let k = 2; k < coords.length - 2; k += 2) {
+        const r = calcRadiusMeters(coords[k - 2], coords[k], coords[k + 2]);
+        if (r < minR) minR = r;
+      }
+
+      curves.push({
+        coords,
+        lengthKm: arcM / 1000,
+        minRadiusM: Math.round(Math.min(2000, minR))
+      });
+    }
+    return curves;
+  }
+
+  // 曲線半径に基づく現実的な鉄道制限速度（km/h）
+  function speedLimitForRadius(r) {
+    if (r >= 800) return 110;
+    if (r >= 500) return 90;
+    if (r >= 350) return 75;
+    if (r >= 240) return 60;
+    if (r >= 160) return 48;
+    return 36;
+  }
+
+  // 実在ベクトル地図（OpenFreeMap）上の道路・河川・建物をサンプリング解析
+  function analyzeAlignmentOnMap(coords, structure, muniPriceBase) {
+    let lengthKm = 0;
+    for (let i = 1; i < coords.length; i++) {
+      lengthKm += haversineKm(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]);
+    }
+    let minR = 9999;
+    for (let k = 2; k < coords.length - 2; k += 2) {
+      const r = calcRadiusMeters(coords[k - 2], coords[k], coords[k + 2]);
+      if (r < minR) minR = r;
+    }
+    const minRadiusM = Math.round(Math.min(2000, minR));
+
+    let majorRoadCrossings = 0;
+    let roadSamples = 0;
+    let waterSamples = 0;
+    let buildingSamples = 0;
+    const totalSamples = Math.max(1, coords.length - 2);
+
+    if (map && mapReady) {
+      try {
+        let inMajorRoad = false;
+        let inWater = false;
+        let waterCrossings = 0;
+        for (let i = 1; i < coords.length - 1; i++) {
+          const pt = map.project(coords[i]);
+          if (pt.x < -20 || pt.y < -20 || pt.x > map.getCanvas().clientWidth + 20 || pt.y > map.getCanvas().clientHeight + 20) {
+            continue;
+          }
+          const bbox = [[pt.x - 5, pt.y - 5], [pt.x + 5, pt.y + 5]];
+          const feats = map.queryRenderedFeatures(bbox);
+          let hitMajor = false;
+          let hitAnyRoad = false;
+          let hitWater = false;
+          let hitBuilding = false;
+          for (const f of feats) {
+            const sl = f.sourceLayer || '';
+            const lid = (f.layer && f.layer.id) || '';
+            if (lid.startsWith('my-') || lid.startsWith('existing-') || lid.startsWith('dev-') || lid.startsWith('station-') || lid.startsWith('preview-')) continue;
+            if (sl === 'transportation' || lid.includes('road') || lid.includes('highway') || lid.includes('motorway')) {
+              const cls = (f.properties && f.properties.class) || '';
+              if (['motorway', 'trunk', 'primary', 'secondary'].includes(cls)) {
+                hitMajor = true;
+                hitAnyRoad = true;
+              } else if (['tertiary', 'minor', 'residential', 'service', 'track'].includes(cls)) {
+                hitAnyRoad = true;
+              }
+            } else if (sl === 'water' || sl === 'waterway' || lid.includes('water') || lid.includes('river')) {
+              hitWater = true;
+            } else if (sl === 'building' || lid.includes('building')) {
+              hitBuilding = true;
+            }
+          }
+          if (hitMajor && !inMajorRoad) majorRoadCrossings += 1;
+          inMajorRoad = hitMajor;
+          if (hitAnyRoad) roadSamples += 1;
+          if (hitWater) {
+            waterSamples += 1;
+            if (!inWater) waterCrossings += 1;
+          }
+          inWater = hitWater;
+          if (hitBuilding) buildingSamples += 1;
+        }
+        if (waterCrossings > 0) waterSamples = Math.max(waterSamples, waterCrossings);
+      } catch (_) {}
+    }
+
+    const roadFollowRatio = roadSamples / totalSamples;
+    const buildingDensity = buildingSamples / totalSamples;
+    const hasRiver = waterSamples > 0;
+    const levelCrossings = structure === 'surface' ? majorRoadCrossings : 0;
+    const roadUndergroundDiscount = structure === 'underground' && roadFollowRatio >= 0.30;
+
+    // 構造別の現実的な建設コスト算出（億円）
+    const stDef = STRUCTURES[structure] || STRUCTURES.surface;
+    const baseTrackCost = (16 + lengthKm * 8.0) * stDef.costMult;
+    const landAcqCost = structure === 'underground'
+      ? muniPriceBase * 0.14
+      : (muniPriceBase * 0.32 + buildingDensity * lengthKm * 9.5);
+    const riverCost = hasRiver ? (structure === 'underground' ? 30 : 22) : 0;
+    const curveCost = minRadiusM < 250 ? 10 : 0;
+    let totalCost = baseTrackCost + landAcqCost + riverCost + curveCost;
+    if (roadUndergroundDiscount) totalCost *= 0.80;
+    totalCost = Math.round(totalCost);
+
+    // 曲線半径＋地上踏切による区間実効制限速度
+    const curveCap = speedLimitForRadius(minRadiusM);
+    const crossingPenaltyKmh = levelCrossings * 7;
+    const maxSpeedKmh = Math.max(30, curveCap - crossingPenaltyKmh);
+
+    return {
+      lengthKm,
+      minRadiusM,
+      majorRoadCrossings,
+      levelCrossings,
+      hasRiver,
+      buildingDensity,
+      roadFollowRatio,
+      roadUndergroundDiscount,
+      landAcqCost: Math.round(landAcqCost),
+      riverCost,
+      totalCost,
+      maxSpeedKmh,
+      structure
+    };
+  }
+
   // 指定緯度経度の周囲に3D押し出しポリゴン（矩形）を作る
   function makeBuildingPolygon(lng, lat, halfW_m, halfH_m, offsetLng_m = 0, offsetLat_m = 0) {
     const mPerDegLat = 111320;
@@ -534,8 +807,12 @@
     showSpeedHeat: true,
     tutorialVisible: true,
     tutorialSkippedDirect: false,
+    buildStructure: 'elevated', // 'surface' | 'elevated' | 'underground'
+    hoverPreview: null,
 
     myStations: [],
+    segments: [], // [{ fromId, toId, structure, coords, lengthKm, minRadiusM, levelCrossings, hasRiver, maxSpeedKmh, roadUndergroundDiscount }]
+    routePolyline: [], // 列車走行用の連続曲線座標 [{ lng, lat, cumKm }]
     directAgreements: {},
     services: [
       { id: 'local',   name: '各停', color: '#38bdf8', speed: 42, freq: 6, enabled: true,  direct: false, surcharge: 0,   stops: {} },
@@ -593,6 +870,8 @@
 
   function initWorld() {
     state.myStations = [];
+    state.segments = [];
+    state.routePolyline = [];
     state.directAgreements = {};
     state.services.forEach(sv => { sv.stops = {}; sv.direct = false; });
     state.selectedStationId = null;
@@ -624,7 +903,65 @@
     return false;
   }
 
+  function rebuildSegmentsGeometry() {
+    const n = state.myStations.length;
+    if (n < 2) {
+      state.segments = [];
+      state.routePolyline = [];
+      return;
+    }
+    const oldMeta = {};
+    state.segments.forEach(sg => {
+      oldMeta[`${sg.fromId}_${sg.toId}`] = sg;
+      oldMeta[`${sg.toId}_${sg.fromId}`] = sg;
+    });
+
+    const curves = computeRouteCurves(state.myStations);
+    const newSegs = [];
+    const polyline = [];
+    let totalKm = 0;
+
+    for (let i = 0; i < n - 1; i++) {
+      const a = state.myStations[i];
+      const b = state.myStations[i + 1];
+      const prev = oldMeta[`${a.id}_${b.id}`];
+      const struct = prev ? prev.structure : state.buildStructure;
+      const c = curves[i];
+      const levelCrossings = prev ? prev.levelCrossings : 0;
+      const hasRiver = prev ? prev.hasRiver : false;
+      const roadUndergroundDiscount = prev ? prev.roadUndergroundDiscount : false;
+      const maxSpeedKmh = Math.max(30, speedLimitForRadius(c.minRadiusM) - levelCrossings * 7);
+
+      newSegs.push({
+        fromId: a.id,
+        toId: b.id,
+        structure: struct,
+        coords: c.coords,
+        lengthKm: c.lengthKm,
+        minRadiusM: c.minRadiusM,
+        levelCrossings,
+        hasRiver,
+        roadUndergroundDiscount,
+        maxSpeedKmh
+      });
+
+      c.coords.forEach((pt, idx) => {
+        if (i > 0 && idx === 0) return;
+        if (polyline.length > 0) {
+          const lp = polyline[polyline.length - 1];
+          totalKm += haversineKm(lp.lat, lp.lng, pt[1], pt[0]);
+        }
+        polyline.push({ lng: pt[0], lat: pt[1], cumKm: totalKm });
+      });
+    }
+    state.segments = newSegs;
+    state.routePolyline = polyline;
+  }
+
   function getLineLengthKm() {
+    if (state.segments.length > 0) {
+      return state.segments.reduce((acc, sg) => acc + sg.lengthKm, 0);
+    }
     let km = 0;
     for (let i = 0; i < state.myStations.length - 1; i++) {
       const a = state.myStations[i];
@@ -658,11 +995,12 @@
     const activeServices = state.services.filter(s => s.enabled && s.freq > 0);
     const hasAnyDirectAgreement = getConnectedDirectStations().length > 0;
 
+    if (state.segments.length !== n - 1) rebuildSegmentsGeometry();
     const cumKm = [0];
     for (let i = 1; i < n; i++) {
-      const a = state.myStations[i - 1];
-      const b = state.myStations[i];
-      cumKm.push(cumKm[i - 1] + haversineKm(a.lat, a.lng, b.lat, b.lng));
+      const sg = state.segments[i - 1];
+      const segKm = sg ? sg.lengthKm : haversineKm(state.myStations[i - 1].lat, state.myStations[i - 1].lng, state.myStations[i].lat, state.myStations[i].lng);
+      cumKm.push(cumKm[i - 1] + segKm);
     }
 
     const gateways = [];
@@ -715,13 +1053,22 @@
           let bestRunMin = Infinity;
           let canDirectHere = false;
 
+          const loIdx = Math.min(i, gw.idx);
+          const hiIdx = Math.max(i, gw.idx);
           activeServices.forEach(sv => {
             if (sv.stops[st.id] && sv.stops[gw.st.id]) {
               const isFast = sv.speed > 45;
-              const effSpeed = isFast && !hasPassing
+              const baseEffSpeed = isFast && !hasPassing
                 ? 42 + (sv.speed - 42) * 0.35
                 : sv.speed;
-              const runMin = (distKm / effSpeed) * 60;
+              let runMin = 0;
+              for (let sIdx = loIdx; sIdx < hiIdx; sIdx++) {
+                const sg = state.segments[sIdx];
+                const sgLen = sg ? sg.lengthKm : 1;
+                const sgCap = sg ? sg.maxSpeedKmh : 90;
+                const segSpeed = Math.min(baseEffSpeed, sgCap);
+                runMin += (sgLen / segSpeed) * 60;
+              }
               if (runMin < bestRunMin) bestRunMin = runMin;
               if (gw.isDirect && sv.direct) canDirectHere = true;
             }
@@ -790,7 +1137,11 @@
 
     const lineKm = getLineLengthKm();
     const passingCount = state.myStations.filter(s => s.hasPassing).length;
-    const trackCost = lineKm * 0.22 + state.myStations.length * 0.45 + passingCount * 0.35;
+    const structTrackCost = state.segments.reduce((acc, sg) => {
+      const m = (STRUCTURES[sg.structure] || STRUCTURES.surface).upkeepMult;
+      return acc + sg.lengthKm * 0.22 * m + sg.levelCrossings * 0.12;
+    }, 0);
+    const trackCost = structTrackCost + state.myStations.length * 0.45 + passingCount * 0.35;
 
     let totalFreq = 0;
     let directFreq = 0;
@@ -950,6 +1301,18 @@
       syncStationMarkers();
     });
 
+    let lastPreviewTs = 0;
+    map.on('mousemove', (e) => {
+      if (state.buildMode !== 'extend') {
+        clearPreviewTrack();
+        return;
+      }
+      const now = performance.now();
+      if (now - lastPreviewTs < 45) return;
+      lastPreviewTs = now;
+      updateHoverPreview(e.lngLat.lat, e.lngLat.lng);
+    });
+
     map.on('click', (e) => {
       const lat = e.lngLat.lat;
       const lng = e.lngLat.lng;
@@ -1060,27 +1423,88 @@
       });
     }
 
-    // 5. 自社路線（Subway Builder風の太いベース＋鮮やかな速度/路線カラー）
+    // 5. 自社路線（地上・高架・地下の構造別ビジュアル＋曲線線形）
     if (!map.getSource('my-track')) {
       map.addSource('my-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      // 高架用の立体シャドウ
+      map.addLayer({
+        id: 'my-track-elevated-shadow',
+        type: 'line',
+        source: 'my-track',
+        filter: ['==', ['get', 'structure'], 'elevated'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': 'rgba(15, 23, 42, 0.35)',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 8, 14, 15],
+          'line-translate': [2, 4]
+        }
+      });
+      // 地上・高架ケーシング
       map.addLayer({
         id: 'my-track-casing',
         type: 'line',
         source: 'my-track',
+        filter: ['!=', ['get', 'structure'], 'underground'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': '#0f172a',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 10]
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 10.5]
         }
       });
+      // 地上・高架本体
       map.addLayer({
         id: 'my-track-inner',
         type: 'line',
         source: 'my-track',
+        filter: ['!=', ['get', 'structure'], 'underground'],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': ['get', 'color'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 6.2]
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 6.4]
+        }
+      });
+      // 地下シールド線（破線＋半透明）
+      map.addLayer({
+        id: 'my-track-underground-casing',
+        type: 'line',
+        source: 'my-track',
+        filter: ['==', ['get', 'structure'], 'underground'],
+        layout: { 'line-cap': 'butt', 'line-join': 'round' },
+        paint: {
+          'line-color': '#0f172a',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 9.5],
+          'line-opacity': 0.55,
+          'line-dasharray': [2.2, 1.4]
+        }
+      });
+      map.addLayer({
+        id: 'my-track-underground',
+        type: 'line',
+        source: 'my-track',
+        filter: ['==', ['get', 'structure'], 'underground'],
+        layout: { 'line-cap': 'butt', 'line-join': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 5.8],
+          'line-opacity': 0.85,
+          'line-dasharray': [2.2, 1.4]
+        }
+      });
+    }
+
+    // 5b. 延伸リアルタイム線形プレビュー（ゴーストライン）
+    if (!map.getSource('preview-track')) {
+      map.addSource('preview-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'preview-track-line',
+        type: 'line',
+        source: 'preview-track',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 4, 14, 7],
+          'line-opacity': 0.85,
+          'line-dasharray': [1.8, 1.4]
         }
       });
     }
@@ -1110,10 +1534,7 @@
         properties: { name: line.name, color: line.color },
         geometry: {
           type: 'LineString',
-          coordinates: line.stations.map(id => {
-            const ex = EXISTING_STATIONS.find(e => e.id === id);
-            return ex ? [ex.lng, ex.lat] : null;
-          }).filter(Boolean)
+          coordinates: line.coords
         }
       }))
     };
@@ -1146,27 +1567,29 @@
       map.getSource('station-zones').setData({ type: 'FeatureCollection', features: zoneFeatures });
     }
 
-    // 自社路線（区間ごとに速度・混雑ヒートカラー or シアン）
+    // 自社路線（滑らかな曲線線形＋構造種別＋曲線/踏切/混雑による速度ヒート）
     const trackFeatures = [];
     const maxSpeed = Math.max(...state.services.filter(s => s.enabled).map(s => s.speed), 42);
     const hasPassing = hasIntermediatePassingTrack();
 
-    for (let i = 0; i < state.myStations.length - 1; i++) {
+    for (let i = 0; i < state.segments.length; i++) {
+      const sg = state.segments[i];
       const a = state.myStations[i];
       const b = state.myStations[i + 1];
-      let segColor = '#0ea5e9';
-      if (state.showSpeedHeat) {
-        const effSpeed = maxSpeed > 45 && !hasPassing ? 42 + (maxSpeed - 42) * 0.35 : maxSpeed;
+      let segColor = sg.structure === 'underground' ? '#38bdf8' : (sg.structure === 'elevated' ? '#0ea5e9' : '#06b6d4');
+      if (state.showSpeedHeat && a && b) {
+        const baseEff = maxSpeed > 45 && !hasPassing ? 42 + (maxSpeed - 42) * 0.35 : maxSpeed;
+        const effSpeed = Math.min(baseEff, sg.maxSpeedKmh);
         const avgCong = (a.congestion + b.congestion) * 0.5;
-        if (avgCong > 140) segColor = '#ef4444';
+        if (avgCong > 140 || effSpeed < 45) segColor = '#ef4444';
         else if (effSpeed >= 70) segColor = '#22c55e';
-        else if (effSpeed >= 54) segColor = '#84cc16';
+        else if (effSpeed >= 55) segColor = '#84cc16';
         else segColor = '#f59e0b';
       }
       trackFeatures.push({
         type: 'Feature',
-        properties: { color: segColor },
-        geometry: { type: 'LineString', coordinates: [[a.lng, a.lat], [b.lng, b.lat]] }
+        properties: { color: segColor, structure: sg.structure },
+        geometry: { type: 'LineString', coordinates: sg.coords }
       });
     }
     if (map.getSource('my-track')) {
@@ -1258,13 +1681,23 @@
       map.getSource('my-trains').setData({ type: 'FeatureCollection', features: [] });
       return;
     }
+    const poly = state.routePolyline;
+    if (!poly || poly.length < 2) return;
+    const maxSeg = Math.max(1, state.myStations.length - 1);
+    const totalKm = poly[poly.length - 1].cumKm || 1;
     const features = state.trains.map(tr => {
-      const segIdx = Math.min(state.myStations.length - 2, Math.max(0, Math.floor(tr.progress)));
-      const frac = tr.progress - segIdx;
-      const a = state.myStations[segIdx];
-      const b = state.myStations[segIdx + 1];
-      const lng = a.lng + (b.lng - a.lng) * frac;
-      const lat = a.lat + (b.lat - a.lat) * frac;
+      const targetKm = (Math.max(0, Math.min(maxSeg, tr.progress)) / maxSeg) * totalKm;
+      let lo = 0, hi = poly.length - 1;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (poly[mid].cumKm <= targetKm) lo = mid;
+        else hi = mid;
+      }
+      const pA = poly[lo], pB = poly[hi];
+      const span = Math.max(1e-6, pB.cumKm - pA.cumKm);
+      const frac = Math.max(0, Math.min(1, (targetKm - pA.cumKm) / span));
+      const lng = pA.lng + (pB.lng - pA.lng) * frac;
+      const lat = pA.lat + (pB.lat - pA.lat) * frac;
       return {
         type: 'Feature',
         properties: { color: tr.color },
@@ -1319,7 +1752,12 @@
     } else {
       banner.classList.add('hidden');
       if (mapWrap) mapWrap.classList.remove('extend-cursor');
+      clearPreviewTrack();
     }
+    document.querySelectorAll('.struct-pill').forEach(btn => {
+      const active = btn.dataset.struct === state.buildStructure;
+      btn.className = `struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border cursor-pointer ${active ? 'bg-sky-500 text-slate-950 border-sky-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'}`;
+    });
 
     updateMapChip();
     renderTutorial();
@@ -1547,6 +1985,42 @@
       </div>` : ''}
 
       ${directHtml}
+
+      <div class="mt-3">
+        <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">延伸時の線路構造（道路・河川との兼ね合い）</div>
+        <div class="grid grid-cols-3 gap-1.5">
+          ${Object.values(STRUCTURES).map(stf => {
+            const active = state.buildStructure === stf.id;
+            return `
+              <button data-action="set-structure" data-struct="${stf.id}" class="py-1.5 px-2 rounded-lg text-[10px] md:text-xs font-bold border cursor-pointer ${active ? 'bg-sky-600/25 border-sky-400 text-white' : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300'}">
+                ${stf.icon} ${stf.name}
+              </button>`;
+          }).join('')}
+        </div>
+        <div class="text-[10px] md:text-xs text-slate-400 mt-1">${STRUCTURES[state.buildStructure].desc}</div>
+      </div>
+
+      ${state.segments.length > 0 ? `
+      <div class="mt-3">
+        <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">区間別 線形・インフラ状況</div>
+        <div class="space-y-1">
+          ${state.segments.map((sg, idx) => {
+            const a = state.myStations[idx];
+            const b = state.myStations[idx + 1];
+            const stf = STRUCTURES[sg.structure] || STRUCTURES.surface;
+            return `
+              <div class="flex items-center justify-between bg-slate-800/60 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[10px] md:text-xs">
+                <span class="font-bold text-slate-200 truncate pr-2">${stf.icon} ${a ? a.name : ''}⇔${b ? b.name : ''}</span>
+                <div class="flex items-center gap-2 shrink-0 tabular-nums">
+                  <span class="${sg.minRadiusM < 250 ? 'text-rose-400 font-bold' : (sg.minRadiusM < 450 ? 'text-amber-300' : 'text-emerald-400')}">R${sg.minRadiusM}m</span>
+                  <span class="text-slate-300">上限${sg.maxSpeedKmh}km/h</span>
+                  ${sg.levelCrossings > 0 ? `<span class="text-rose-400 font-bold">踏切×${sg.levelCrossings}</span>` : ''}
+                  ${sg.hasRiver ? `<span class="text-sky-300">橋梁</span>` : ''}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
 
       <div class="mt-3">
         <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">自社駅一覧（クリックでフォーカス）</div>
@@ -1800,46 +2274,152 @@
   // =========================================================================
   // 8. プレイヤー操作ハンドラ
   // =========================================================================
-  function tryExtendToLatLng(lat, lng) {
-    // 既存駅に近ければスナップして直通接続可能にする
+  function clearPreviewTrack() {
+    if (map && mapReady && map.getSource('preview-track')) {
+      map.getSource('preview-track').setData({ type: 'FeatureCollection', features: [] });
+    }
+    const box = document.getElementById('align-preview-box');
+    if (box) box.classList.add('hidden');
+    state.hoverPreview = null;
+  }
+
+  function buildCandidateExtension(lat, lng) {
     const nearEx = getNearestExistingStation(lat, lng, 0.95);
     const targetLat = nearEx ? nearEx.lat : lat;
     const targetLng = nearEx ? nearEx.lng : lng;
-
     const muni = getNearestMunicipality(targetLat, targetLng);
-    let attachToStart = false;
-    let distKm = 0;
 
-    if (state.myStations.length > 0) {
-      if (state.myStations.some(s => haversineKm(s.lat, s.lng, targetLat, targetLng) < 0.7)) {
-        showToast('既存の自社駅に近すぎます（もう少し離れた地点を選択）');
-        playSfx('error');
-        return;
-      }
-      const first = state.myStations[0];
-      const last = state.myStations[state.myStations.length - 1];
-      const dFirst = haversineKm(first.lat, first.lng, targetLat, targetLng);
-      const dLast = haversineKm(last.lat, last.lng, targetLat, targetLng);
-      attachToStart = dFirst < dLast;
-      distKm = Math.min(dFirst, dLast);
-
-      if (distKm > 12.0) {
-        showToast('終端駅から遠すぎます（12km以内を選択）');
-        playSfx('error');
-        return;
-      }
+    if (state.myStations.length === 0) {
+      const cost = Math.round(20 + muni.priceBase * 0.35);
+      return {
+        valid: true,
+        isFirst: true,
+        nearEx,
+        targetLat,
+        targetLng,
+        muni,
+        cost,
+        coords: [],
+        analysis: null
+      };
     }
 
-    const cost = state.myStations.length === 0
-      ? Math.round(20 + muni.priceBase * 0.35)
-      : Math.round(18 + distKm * 7.5 + muni.priceBase * 0.35);
+    if (state.myStations.some(s => haversineKm(s.lat, s.lng, targetLat, targetLng) < 0.7)) {
+      return { valid: false, reason: '既存の自社駅に近すぎます（700m以上離してください）' };
+    }
+    const first = state.myStations[0];
+    const last = state.myStations[state.myStations.length - 1];
+    const dFirst = haversineKm(first.lat, first.lng, targetLat, targetLng);
+    const dLast = haversineKm(last.lat, last.lng, targetLat, targetLng);
+    const attachToStart = dFirst < dLast;
+    const distKm = Math.min(dFirst, dLast);
 
+    if (distKm > 12.0) {
+      return { valid: false, reason: '終端駅から遠すぎます（12km以内を選択）' };
+    }
+
+    const tempStations = state.myStations.slice();
+    const dummy = { id: '__preview__', lat: targetLat, lng: targetLng };
+    if (attachToStart) tempStations.unshift(dummy);
+    else tempStations.push(dummy);
+
+    const curves = computeRouteCurves(tempStations);
+    const newSegCurve = attachToStart ? curves[0] : curves[curves.length - 1];
+    const analysis = analyzeAlignmentOnMap(newSegCurve.coords, state.buildStructure, muni.priceBase);
+
+    return {
+      valid: true,
+      isFirst: false,
+      attachToStart,
+      nearEx,
+      targetLat,
+      targetLng,
+      muni,
+      cost: analysis.totalCost,
+      coords: newSegCurve.coords,
+      analysis
+    };
+  }
+
+  function updateHoverPreview(lat, lng) {
+    const box = document.getElementById('align-preview-box');
+    const cand = buildCandidateExtension(lat, lng);
+    state.hoverPreview = cand;
+
+    if (!cand.valid) {
+      if (map && mapReady && map.getSource('preview-track')) {
+        map.getSource('preview-track').setData({ type: 'FeatureCollection', features: [] });
+      }
+      if (box) {
+        box.classList.remove('hidden');
+        box.innerHTML = `<span class="text-rose-300 font-bold">⚠ ${cand.reason}</span>`;
+      }
+      return;
+    }
+
+    if (cand.isFirst) {
+      if (box) {
+        box.classList.remove('hidden');
+        const snapTxt = cand.nearEx ? `<span class="text-amber-300 font-bold">★ ${cand.nearEx.name}駅にスナップ</span> ・` : '';
+        box.innerHTML = `${snapTxt}${cand.muni.name}に始発駅を建設 ・見積り <strong class="text-amber-300">${cand.cost}億円</strong>`;
+      }
+      return;
+    }
+
+    const a = cand.analysis;
+    const okFunds = state.funds >= cand.cost;
+    let lineColor = '#38bdf8';
+    if (!okFunds) lineColor = '#f43f5e';
+    else if (a.minRadiusM < 250 || a.levelCrossings > 0) lineColor = '#f59e0b';
+    else lineColor = '#22c55e';
+
+    if (map && mapReady && map.getSource('preview-track')) {
+      map.getSource('preview-track').setData({
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          properties: { color: lineColor },
+          geometry: { type: 'LineString', coordinates: cand.coords }
+        }]
+      });
+    }
+
+    if (box) {
+      const tags = [];
+      if (cand.nearEx) tags.push(`<span class="text-amber-300 font-bold">★${cand.nearEx.name}接続</span>`);
+      if (a.hasRiver) tags.push(`<span class="text-sky-300">🌊河川渡河(+${a.riverCost}億)</span>`);
+      if (a.levelCrossings > 0) tags.push(`<span class="text-rose-300 font-bold">🚧幹線踏切×${a.levelCrossings}(減速)</span>`);
+      else if (a.majorRoadCrossings > 0) tags.push(`<span class="text-emerald-300">✓幹線道路立体交差</span>`);
+      if (a.roadUndergroundDiscount) tags.push(`<span class="text-emerald-300 font-bold">🛣️公道下シールド-20%</span>`);
+      if (a.structure !== 'underground' && a.buildingDensity >= 0.25) tags.push(`<span class="text-amber-300">🏘️建物密集(用地+${a.landAcqCost}億)</span>`);
+
+      const rColor = a.minRadiusM < 250 ? 'text-rose-300' : (a.minRadiusM < 450 ? 'text-amber-300' : 'text-emerald-300');
+      box.classList.remove('hidden');
+      box.innerHTML = `
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span>延長 <strong>${a.lengthKm.toFixed(2)}km</strong> ・最小曲線 <strong class="${rColor}">R${a.minRadiusM}m</strong> (上限${a.maxSpeedKmh}km/h)</span>
+          <span class="font-extrabold ${okFunds ? 'text-amber-300' : 'text-rose-400'}">見積り ${cand.cost}億円</span>
+        </div>
+        ${tags.length ? `<div class="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">${tags.join('')}</div>` : ''}
+      `;
+    }
+  }
+
+  function tryExtendToLatLng(lat, lng) {
+    const cand = buildCandidateExtension(lat, lng);
+    if (!cand.valid) {
+      showToast(cand.reason);
+      playSfx('error');
+      return;
+    }
+    const cost = cand.cost;
     if (state.funds < cost) {
       showToast(`資金が不足しています（必要: ${cost}億円）`);
       playSfx('error');
       return;
     }
 
+    const { nearEx, targetLat, targetLng, muni, attachToStart, analysis } = cand;
     state.funds = Math.round((state.funds - cost) * 10) / 10;
     const newId = 'st_' + (state.myStations.length + 1);
     let newName = nearEx
@@ -1848,6 +2428,10 @@
     if (state.myStations.some(s => s.name === newName)) {
       newName = `${newName}新`;
     }
+
+    const prevEndpoint = state.myStations.length > 0
+      ? (attachToStart ? state.myStations[0] : state.myStations[state.myStations.length - 1])
+      : null;
 
     const newStation = createStationState({
       id: newId,
@@ -1861,17 +2445,38 @@
     if (attachToStart) state.myStations.unshift(newStation);
     else state.myStations.push(newStation);
 
+    if (prevEndpoint && analysis) {
+      const segEntry = {
+        fromId: attachToStart ? newId : prevEndpoint.id,
+        toId: attachToStart ? prevEndpoint.id : newId,
+        structure: state.buildStructure,
+        coords: cand.coords,
+        lengthKm: analysis.lengthKm,
+        minRadiusM: analysis.minRadiusM,
+        levelCrossings: analysis.levelCrossings,
+        hasRiver: analysis.hasRiver,
+        roadUndergroundDiscount: analysis.roadUndergroundDiscount,
+        maxSpeedKmh: analysis.maxSpeedKmh
+      };
+      if (attachToStart) state.segments.unshift(segEntry);
+      else state.segments.push(segEntry);
+    }
+    rebuildSegmentsGeometry();
+    clearPreviewTrack();
+
     state.services.forEach(sv => { sv.stops[newId] = true; });
     state.selectedStationId = newId;
     state.selectedPoint = { lat: targetLat, lng: targetLng, muni };
 
+    const stLabel = (STRUCTURES[state.buildStructure] || STRUCTURES.surface).name;
     playSfx('build');
     if (state.myStations.length === 1) {
       showToast(`🚉 始発駅「${newName}駅」を建設！（${cost}億円）次は2駅目を繋ごう`);
     } else if (state.myStations.length === 2) {
-      showToast(`🎉 ${newName}駅が開業し路線開通！（${cost}億円）列車が走り始めます`);
+      showToast(`🎉 ${newName}駅が開業し路線開通！（${stLabel}・${cost}億円）`);
     } else {
-      showToast(`🚉 ${newName}駅を開業！（建設費 ${cost}億円）`);
+      const warn = analysis && analysis.levelCrossings > 0 ? ` / 踏切×${analysis.levelCrossings}` : '';
+      showToast(`🚉 ${newName}駅を開業！（${stLabel}・R${analysis ? analysis.minRadiusM : '-'}m${warn}・${cost}億）`);
     }
     recalculateSimulation(false);
     rebuildTrainActors();
@@ -1886,7 +2491,12 @@
     if (!btn) return;
     const action = btn.dataset.action;
 
-    if (action === 'toggle-extend') {
+    if (action === 'set-structure') {
+      state.buildStructure = btn.dataset.struct;
+      playSfx('tap');
+      updateHUD();
+      renderPanel();
+    } else if (action === 'toggle-extend') {
       state.buildMode = state.buildMode === 'extend' ? null : 'extend';
       playSfx('tap');
       if (state.buildMode === 'extend') showToast('実在マップ上の任意の地点をタップして延伸');
@@ -2109,6 +2719,14 @@
     state.buildMode = null;
     updateHUD();
     renderPanel();
+  });
+  document.querySelectorAll('.struct-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.buildStructure = btn.dataset.struct;
+      playSfx('tap');
+      updateHUD();
+      renderPanel();
+    });
   });
 
   // マップ操作ボタン
