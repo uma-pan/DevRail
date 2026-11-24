@@ -89,6 +89,7 @@
   let EXISTING_STATIONS = BUILTIN_STATIONS.slice();
   let EXISTING_LINES = BUILTIN_LINES.slice();
   let customExistingLinesGeoJSON = null;
+  let loadedOsmWayIds = new Set();
   let osmLoading = false;
   let cachedPlaceLabelLayers = [];
 
@@ -1402,7 +1403,7 @@
       };
     });
 
-    // 路線ジオメトリ生成（頂点間引きで軽量化）
+    // 路線ジオメトリ生成（広域でも軽快に描画できるよう頂点間引き）
     const lineFeatures = [];
     for (const w of rawWays) {
       const rawCoords = [];
@@ -1411,16 +1412,16 @@
         if (pt) rawCoords.push(pt);
       }
       if (rawCoords.length < 2) continue;
-      // 長いwayは1点おきに間引いて描画軽量化
-      const coords = rawCoords.length > 16
-        ? rawCoords.filter((_, idx) => idx === 0 || idx === rawCoords.length - 1 || idx % 2 === 0)
+      const stride = rawCoords.length > 30 ? 3 : (rawCoords.length > 12 ? 2 : 1);
+      const coords = stride > 1
+        ? rawCoords.filter((_, idx) => idx === 0 || idx === rawCoords.length - 1 || idx % stride === 0)
         : rawCoords;
       const tags = w.tags || {};
       const name = tags['name:ja'] || tags.name || tags.operator || '既存線';
       const color = tags.colour || pickOperatorColor(name, tags.operator || tags.network);
       lineFeatures.push({
         type: 'Feature',
-        properties: { name, color },
+        properties: { osmId: w.id, name, color },
         geometry: { type: 'LineString', coordinates: coords }
       });
     }
@@ -1431,25 +1432,28 @@
     };
   }
 
-  async function loadOsmRailForCurrentView() {
+  async function loadOsmRailForCurrentView(replaceExisting = false) {
     if (!map || !mapReady || osmLoading) return;
     const btn = document.getElementById('btn-load-osm-rail');
     const c = map.getCenter();
     const b = map.getBounds();
-    // 過大な広域リクエストを防ぐため最大約±0.11度（約24km四方）にクランプ
-    const s = Math.max(b.getSouth(), c.lat - 0.10);
-    const n = Math.min(b.getNorth(), c.lat + 0.10);
-    const w = Math.max(b.getWest(), c.lng - 0.13);
-    const e = Math.min(b.getEast(), c.lng + 0.13);
+    // 画面範囲に余白を加え、最低約40km四方〜最大約80km四方（首都圏・京阪神クラス）まで一括読込
+    const halfLat = Math.max(0.18, Math.min(0.36, (b.getNorth() - b.getSouth()) * 0.62));
+    const halfLng = Math.max(0.22, Math.min(0.45, (b.getEast() - b.getWest()) * 0.62));
+    const s = c.lat - halfLat;
+    const n = c.lat + halfLat;
+    const w = c.lng - halfLng;
+    const e = c.lng + halfLng;
 
-    const query = `[out:json][timeout:18];(node["railway"~"^(station|halt)$"](${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)});way["railway"~"^(rail|subway|light_rail|monorail|tram)$"]["service"!~"^(yard|siding|spur|crossover)$"](${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)}););out body;>;out skel qt;`;
+    const query = `[out:json][timeout:25];(node["railway"~"^(station|halt)$"](${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)});way["railway"~"^(rail|subway|light_rail|monorail|tram)$"]["service"!~"^(yard|siding|spur|crossover)$"](${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)}););out body;>;out skel qt;`;
     const endpoints = [
       'https://overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter'
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
     ];
 
     osmLoading = true;
-    if (btn) { btn.textContent = '読込中...'; btn.disabled = true; }
+    if (btn) { btn.textContent = '広域読込中...'; btn.disabled = true; }
     try {
       let json = null;
       for (const url of endpoints) {
@@ -1474,8 +1478,28 @@
         showToast('この範囲に既存鉄道路線が見つかりませんでした');
         return;
       }
-      EXISTING_STATIONS = parsed.stations;
-      customExistingLinesGeoJSON = parsed.linesGeoJSON;
+
+      // 初回またはエリア大移動時は差し替え、近隣エリアの追加読込時は既存データへ累積マージ
+      if (replaceExisting || !customExistingLinesGeoJSON) {
+        EXISTING_STATIONS = parsed.stations;
+        loadedOsmWayIds = new Set(parsed.linesGeoJSON.features.map(f => f.properties.osmId));
+        customExistingLinesGeoJSON = parsed.linesGeoJSON;
+      } else {
+        for (const st of parsed.stations) {
+          const dup = EXISTING_STATIONS.some(ex => ex.id === st.id || (ex.name === st.name && haversineKm(ex.lat, ex.lng, st.lat, st.lng) < 0.35));
+          if (!dup) EXISTING_STATIONS.push(st);
+        }
+        const mergedFeatures = customExistingLinesGeoJSON.features.slice();
+        for (const feat of parsed.linesGeoJSON.features) {
+          const oid = feat.properties && feat.properties.osmId;
+          if (!oid || !loadedOsmWayIds.has(oid)) {
+            if (oid) loadedOsmWayIds.add(oid);
+            mergedFeatures.push(feat);
+          }
+        }
+        customExistingLinesGeoJSON = { type: 'FeatureCollection', features: mergedFeatures };
+      }
+
       if (map.getSource('existing-lines')) {
         map.getSource('existing-lines').setData(customExistingLinesGeoJSON);
       }
@@ -1483,7 +1507,7 @@
         map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
       }
       playSfx('build');
-      showToast(`周辺の実在路線を読み込みました（全${parsed.stations.length}駅・${parsed.linesGeoJSON.features.length}区間）`);
+      showToast(`広域の実在路線を読み込みました（累計 ${EXISTING_STATIONS.length}駅・${customExistingLinesGeoJSON.features.length}区間）`);
       recalculateSimulation(false);
       updateHUD();
       renderPanel();
@@ -2988,12 +3012,13 @@
       if (preset.useBuiltin) {
         EXISTING_STATIONS = BUILTIN_STATIONS.slice();
         customExistingLinesGeoJSON = null;
+        loadedOsmWayIds = new Set();
         if (map.getSource('existing-lines')) map.getSource('existing-lines').setData(buildExistingLinesGeoJSON());
         if (map.getSource('existing-stations')) map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
         showToast('東京西南部エリアへ移動しました（周辺路線を読込で全路線取得も可）');
       } else {
         showToast(`${preset.name}エリアへ移動しました。周辺の実在路線を読み込みます...`);
-        setTimeout(() => loadOsmRailForCurrentView(), 300);
+        setTimeout(() => loadOsmRailForCurrentView(true), 300);
       }
     });
   }
