@@ -73,15 +73,24 @@
     }
   }
 
-    const {
+  const {
     MUNICIPALITIES,
-    EXISTING_STATIONS,
-    EXISTING_LINES,
+    EXISTING_STATIONS: BUILTIN_STATIONS,
+    EXISTING_LINES: BUILTIN_LINES,
     LOCAL_PLACES,
+    JAPAN_PRESETS,
+    OPERATOR_COLORS,
     STRUCTURES,
     ZONINGS,
     LANDMARKS
   } = window.RAIL_DATA;
+
+  // 動的差し替え可能な既存駅・既存路線データ（初期値は東京西南部、全国どこでもOSMから全路線読込可能）
+  let EXISTING_STATIONS = BUILTIN_STATIONS.slice();
+  let EXISTING_LINES = BUILTIN_LINES.slice();
+  let customExistingLinesGeoJSON = null;
+  let osmLoading = false;
+  let cachedPlaceLabelLayers = [];
 
   // =========================================================================
   // 3. 地理計算ユーティリティ
@@ -105,7 +114,26 @@
         best = m;
       }
     }
-    return best;
+    if (bestDist <= 14) return best;
+    // 東京西南部エリア外：周辺の既存駅密度から都市規模を自動推定
+    let nearbyStations = 0;
+    for (const ex of EXISTING_STATIONS) {
+      if (haversineKm(lat, lng, ex.lat, ex.lng) <= 3.5) nearbyStations += 1;
+    }
+    const density = Math.min(18000, Math.max(2200, 2800 + nearbyStations * 1350));
+    const commBase = Math.min(92, Math.max(30, 32 + nearbyStations * 6));
+    const priceBase = Math.min(88, Math.max(24, 26 + nearbyStations * 5));
+    const mapPlace = getPlaceNameFromMapTiles(lat, lng);
+    return {
+      id: 'dyn_area',
+      name: mapPlace || '選択エリア',
+      pop: Math.round(density * 20),
+      area: 20,
+      lat,
+      lng,
+      commBase,
+      priceBase
+    };
   }
 
   function getNearestExistingStation(lat, lng, maxKm = 0.65) {
@@ -147,13 +175,52 @@
     return { penaltyMin, label: '徒歩長め', canDirect: false, grade: 'far' };
   }
 
-  // 実在の地域地名から重複しない駅名を決定
+  // 表示中の OpenFreeMap ベクトルタイルから全国の実在日本語地名を取得
+  function getPlaceNameFromMapTiles(lat, lng) {
+    if (!map || !mapReady || cachedPlaceLabelLayers.length === 0) return null;
+    try {
+      const pt = map.project([lng, lat]);
+      const cw = map.getCanvas().clientWidth;
+      const ch = map.getCanvas().clientHeight;
+      if (pt.x < 0 || pt.y < 0 || pt.x > cw || pt.y > ch) return null;
+      const r = 70;
+      const feats = map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]], {
+        layers: cachedPlaceLabelLayers
+      });
+      let bestName = null;
+      let bestDist = Infinity;
+      for (const f of feats) {
+        const p = f.properties || {};
+        const raw = p['name:ja'] || p.name || '';
+        if (!raw || raw.length > 12 || /^[0-9A-Za-z\s\-]+$/.test(raw)) continue;
+        if (raw.endsWith('都') || raw.endsWith('府') || raw.endsWith('県') || raw === '日本') continue;
+        let d = 999;
+        if (f.geometry && f.geometry.type === 'Point') {
+          const [flng, flat] = f.geometry.coordinates;
+          d = haversineKm(lat, lng, flat, flng);
+        } else {
+          d = 0.8;
+        }
+        if (d < bestDist) {
+          bestDist = d;
+          bestName = raw.replace(/駅$/, '');
+        }
+      }
+      return bestName;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // 実在の地域地名から重複しない駅名を決定（全国OpenFreeMap地名＋ローカル辞書）
   function pickStationName(lat, lng, nearEx, transferDistM, muni) {
     const used = new Set(state.myStations.map(s => s.name));
     if (nearEx && transferDistM != null && transferDistM <= 160) {
       if (!used.has(nearEx.name)) return nearEx.name;
       if (!used.has(`新${nearEx.name}`)) return `新${nearEx.name}`;
     }
+    const mapPlace = getPlaceNameFromMapTiles(lat, lng);
+    if (mapPlace && !used.has(mapPlace)) return mapPlace;
     if (LOCAL_PLACES && LOCAL_PLACES.length > 0) {
       const ranked = LOCAL_PLACES
         .map(lp => ({ name: lp.name, d: haversineKm(lat, lng, lp.lat, lp.lng) }))
@@ -887,6 +954,7 @@
         let has3D = false;
         cachedInfraLayers = [];
         realBuildingLayerIds = [];
+        cachedPlaceLabelLayers = [];
         layers.forEach(l => {
           const sl = l['source-layer'] || '';
           const lid = l.id || '';
@@ -898,6 +966,9 @@
           ) {
             try { map.setLayoutProperty(lid, 'visibility', 'none'); } catch (_) {}
             return;
+          }
+          if (l.type === 'symbol' && (sl === 'place' || lid.includes('place') || lid.includes('label_city') || lid.includes('label_town') || lid.includes('label_village') || lid.includes('label_suburb') || lid.includes('label_neighbourhood'))) {
+            cachedPlaceLabelLayers.push(lid);
           }
           // queryRenderedFeatures対象は主要な線・面レイヤーのみに絞る（casing/label/3D除外）
           if (
@@ -1219,7 +1290,16 @@
     }
   }
 
+  function pickOperatorColor(name, operator) {
+    const src = `${operator || ''} ${name || ''}`;
+    for (const item of OPERATOR_COLORS) {
+      if (src.includes(item.kw)) return item.color;
+    }
+    return '#6366f1';
+  }
+
   function buildExistingLinesGeoJSON() {
+    if (customExistingLinesGeoJSON) return customExistingLinesGeoJSON;
     return {
       type: 'FeatureCollection',
       features: EXISTING_LINES.map(line => ({
@@ -1234,6 +1314,183 @@
         }
       }))
     };
+  }
+
+  // OpenStreetMap Overpass API から表示エリア内の全既存鉄道路線・全駅を動的取得（日本全国対応）
+  function parseOverpassRailData(osmJson) {
+    const nodeMap = new Map();
+    const rawStations = [];
+    const rawWays = [];
+
+    for (const el of (osmJson.elements || [])) {
+      if (el.type === 'node') {
+        nodeMap.set(el.id, [el.lon, el.lat]);
+        if (el.tags && (el.tags.railway === 'station' || el.tags.railway === 'halt')) {
+          const nm = (el.tags['name:ja'] || el.tags.name || '').replace(/駅$/, '').trim();
+          if (nm) {
+            rawStations.push({
+              id: 'osm_' + el.id,
+              name: nm,
+              lat: el.lat,
+              lng: el.lon,
+              operator: el.tags.operator || el.tags.network || '',
+              line: el.tags.line || el.tags.operator || '既存線',
+              isSubway: el.tags.station === 'subway'
+            });
+          }
+        }
+      } else if (el.type === 'way' && el.nodes && el.nodes.length >= 2) {
+        rawWays.push(el);
+      }
+    }
+
+    // 同名・近接駅（300m以内）を統合し、複数路線/事業者乗り入れ駅を主要拠点として自動判定
+    const merged = [];
+    for (const st of rawStations) {
+      let found = null;
+      for (const m of merged) {
+        if (m.name === st.name && haversineKm(m.lat, m.lng, st.lat, st.lng) < 0.35) {
+          found = m;
+          break;
+        }
+      }
+      if (found) {
+        if (st.line && !found.lines.includes(st.line)) found.lines.push(st.line);
+        if (st.operator && !found.operators.includes(st.operator)) found.operators.push(st.operator);
+        found.count += 1;
+      } else {
+        merged.push({
+          id: st.id,
+          name: st.name,
+          lat: st.lat,
+          lng: st.lng,
+          lines: [st.line || '既存線'],
+          operators: st.operator ? [st.operator] : [],
+          count: 1
+        });
+      }
+    }
+
+    // 乗換駅数・事業者数でハブ（主要ターミナル）を自動判定
+    merged.forEach(m => {
+      m.score = m.operators.length * 2 + m.lines.length + m.count;
+    });
+    const sortedByScore = merged.slice().sort((a, b) => b.score - a.score);
+    const hubs = sortedByScore.slice(0, Math.min(3, Math.max(1, Math.floor(merged.length / 25))));
+    const hubIds = new Set(hubs.map(h => h.id));
+
+    const stations = merged.map(m => {
+      const isHub = hubIds.has(m.id);
+      const isMajor = isHub || m.operators.length >= 2 || m.lines.length >= 2 || m.count >= 2;
+      let minHubKm = 0;
+      if (!isHub && hubs.length > 0) {
+        minHubKm = Math.min(...hubs.map(h => haversineKm(m.lat, m.lng, h.lat, h.lng)));
+      }
+      const hubCost = isHub ? 0 : Math.min(45, Math.round(4 + minHubKm * 1.6));
+      return {
+        id: m.id,
+        name: m.name,
+        lat: m.lat,
+        lng: m.lng,
+        hub: isHub,
+        major: isMajor,
+        hubCost,
+        lines: m.lines.length ? m.lines : ['既存線'],
+        directCost: isHub ? 100 : (isMajor ? 70 : 58),
+        directFee: isHub ? 5.0 : (isMajor ? 3.5 : 2.8),
+        directSlots: isMajor ? 8 : 6
+      };
+    });
+
+    // 路線ジオメトリ生成（頂点間引きで軽量化）
+    const lineFeatures = [];
+    for (const w of rawWays) {
+      const rawCoords = [];
+      for (const nid of w.nodes) {
+        const pt = nodeMap.get(nid);
+        if (pt) rawCoords.push(pt);
+      }
+      if (rawCoords.length < 2) continue;
+      // 長いwayは1点おきに間引いて描画軽量化
+      const coords = rawCoords.length > 16
+        ? rawCoords.filter((_, idx) => idx === 0 || idx === rawCoords.length - 1 || idx % 2 === 0)
+        : rawCoords;
+      const tags = w.tags || {};
+      const name = tags['name:ja'] || tags.name || tags.operator || '既存線';
+      const color = tags.colour || pickOperatorColor(name, tags.operator || tags.network);
+      lineFeatures.push({
+        type: 'Feature',
+        properties: { name, color },
+        geometry: { type: 'LineString', coordinates: coords }
+      });
+    }
+
+    return {
+      stations,
+      linesGeoJSON: { type: 'FeatureCollection', features: lineFeatures }
+    };
+  }
+
+  async function loadOsmRailForCurrentView() {
+    if (!map || !mapReady || osmLoading) return;
+    const btn = document.getElementById('btn-load-osm-rail');
+    const c = map.getCenter();
+    const b = map.getBounds();
+    // 過大な広域リクエストを防ぐため最大約±0.11度（約24km四方）にクランプ
+    const s = Math.max(b.getSouth(), c.lat - 0.10);
+    const n = Math.min(b.getNorth(), c.lat + 0.10);
+    const w = Math.max(b.getWest(), c.lng - 0.13);
+    const e = Math.min(b.getEast(), c.lng + 0.13);
+
+    const query = `[out:json][timeout:18];(node["railway"~"^(station|halt)$"](${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)});way["railway"~"^(rail|subway|light_rail|monorail|tram)$"]["service"!~"^(yard|siding|spur|crossover)$"](${s.toFixed(4)},${w.toFixed(4)},${n.toFixed(4)},${e.toFixed(4)}););out body;>;out skel qt;`;
+    const endpoints = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter'
+    ];
+
+    osmLoading = true;
+    if (btn) { btn.textContent = '読込中...'; btn.disabled = true; }
+    try {
+      let json = null;
+      for (const url of endpoints) {
+        try {
+          const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'data=' + encodeURIComponent(query)
+          });
+          if (resp.ok) {
+            json = await resp.json();
+            break;
+          }
+        } catch (_) {}
+      }
+      if (!json || !json.elements) {
+        showToast('実在路線データの取得に失敗しました（少し拡大して再試行してください）');
+        return;
+      }
+      const parsed = parseOverpassRailData(json);
+      if (parsed.stations.length === 0 && parsed.linesGeoJSON.features.length === 0) {
+        showToast('この範囲に既存鉄道路線が見つかりませんでした');
+        return;
+      }
+      EXISTING_STATIONS = parsed.stations;
+      customExistingLinesGeoJSON = parsed.linesGeoJSON;
+      if (map.getSource('existing-lines')) {
+        map.getSource('existing-lines').setData(customExistingLinesGeoJSON);
+      }
+      if (map.getSource('existing-stations')) {
+        map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
+      }
+      playSfx('build');
+      showToast(`周辺の実在路線を読み込みました（全${parsed.stations.length}駅・${parsed.linesGeoJSON.features.length}区間）`);
+      recalculateSimulation(false);
+      updateHUD();
+      renderPanel();
+    } finally {
+      osmLoading = false;
+      if (btn) { btn.textContent = '周辺路線を読込'; btn.disabled = false; }
+    }
   }
 
   function buildExistingStationsGeoJSON() {
@@ -2715,9 +2972,39 @@
     playSfx('tap');
   });
   document.getElementById('btn-center').addEventListener('click', () => {
-    if (map) map.easeTo({ center: [139.535, 35.626], zoom: 12.1, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -16 : 0, duration: 450 });
+    const sel = document.getElementById('area-select');
+    const preset = (JAPAN_PRESETS || []).find(p => p.id === (sel && sel.value)) || { lat: 35.626, lng: 139.555, zoom: 12.2 };
+    if (map) map.easeTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0, duration: 450 });
     playSfx('tap');
   });
+
+  const areaSelectEl = document.getElementById('area-select');
+  if (areaSelectEl) {
+    areaSelectEl.addEventListener('change', () => {
+      const preset = (JAPAN_PRESETS || []).find(p => p.id === areaSelectEl.value);
+      if (!preset || !map) return;
+      playSfx('tap');
+      map.jumpTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0 });
+      if (preset.useBuiltin) {
+        EXISTING_STATIONS = BUILTIN_STATIONS.slice();
+        customExistingLinesGeoJSON = null;
+        if (map.getSource('existing-lines')) map.getSource('existing-lines').setData(buildExistingLinesGeoJSON());
+        if (map.getSource('existing-stations')) map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
+        showToast('東京西南部エリアへ移動しました（周辺路線を読込で全路線取得も可）');
+      } else {
+        showToast(`${preset.name}エリアへ移動しました。周辺の実在路線を読み込みます...`);
+        setTimeout(() => loadOsmRailForCurrentView(), 300);
+      }
+    });
+  }
+
+  const loadOsmBtn = document.getElementById('btn-load-osm-rail');
+  if (loadOsmBtn) {
+    loadOsmBtn.addEventListener('click', () => {
+      playSfx('tap');
+      loadOsmRailForCurrentView();
+    });
+  }
 
   // =========================================================================
   // 9. メインループ
