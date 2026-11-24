@@ -326,11 +326,54 @@ window.RAIL_DATA = (() => {
     { name: '菅生', lat: 35.5965, lng: 139.5580 },
     { name: '土橋', lat: 35.5815, lng: 139.5785 }
   ];
+
+  // 日本全国エリアプリセット（任意地点へ移動して実在路線を動的読込可能）
+  const JAPAN_PRESETS = [
+    { id: 'tokyo_west', name: '東京西南部', lat: 35.626, lng: 139.555, zoom: 12.2, useBuiltin: true },
+    { id: 'tokyo_core', name: '東京・新宿', lat: 35.6812, lng: 139.7350, zoom: 12.4 },
+    { id: 'yokohama',   name: '横浜・みなとみらい', lat: 35.4658, lng: 139.6225, zoom: 12.4 },
+    { id: 'osaka',      name: '大阪・梅田', lat: 34.7025, lng: 135.4959, zoom: 12.4 },
+    { id: 'nagoya',     name: '名古屋', lat: 35.1709, lng: 136.8815, zoom: 12.4 },
+    { id: 'fukuoka',    name: '福岡・博多', lat: 33.5902, lng: 130.4017, zoom: 12.4 },
+    { id: 'sapporo',    name: '札幌', lat: 43.0687, lng: 141.3508, zoom: 12.4 },
+    { id: 'sendai',     name: '仙台', lat: 38.2601, lng: 140.8824, zoom: 12.4 }
+  ];
+
+  // 鉄道事業者・路線名キーワード別の標準カラー
+  const OPERATOR_COLORS = [
+    { kw: 'JR', color: '#16a34a' },
+    { kw: '東日本旅客鉄道', color: '#16a34a' },
+    { kw: '東海旅客鉄道', color: '#f97316' },
+    { kw: '西日本旅客鉄道', color: '#2563eb' },
+    { kw: '九州旅客鉄道', color: '#dc2626' },
+    { kw: '北海道旅客鉄道', color: '#22c55e' },
+    { kw: '京王', color: '#db2777' },
+    { kw: '小田急', color: '#2563eb' },
+    { kw: '東急', color: '#dc2626' },
+    { kw: '東京急行', color: '#dc2626' },
+    { kw: '西武', color: '#0284c7' },
+    { kw: '東武', color: '#1d4ed8' },
+    { kw: '京急', color: '#e11d48' },
+    { kw: '京成', color: '#1e40af' },
+    { kw: 'メトロ', color: '#06b6d4' },
+    { kw: '都営', color: '#10b981' },
+    { kw: '相鉄', color: '#1e3a8a' },
+    { kw: '阪急', color: '#7f1d1d' },
+    { kw: '阪神', color: '#ea580c' },
+    { kw: '京阪', color: '#15803d' },
+    { kw: '近鉄', color: '#b91c1c' },
+    { kw: '南海', color: '#0369a1' },
+    { kw: '名鉄', color: '#dc2626' },
+    { kw: '西鉄', color: '#2563eb' },
+    { kw: '地下鉄', color: '#0ea5e9' }
+  ];
   return {
     MUNICIPALITIES,
     EXISTING_STATIONS,
     EXISTING_LINES,
     LOCAL_PLACES,
+    JAPAN_PRESETS,
+    OPERATOR_COLORS,
     STRUCTURES,
     ZONINGS,
     LANDMARKS
