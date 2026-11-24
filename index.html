@@ -1,0 +1,1882 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>沿線デベロッパー TOKYO WEST — 実在2.5Dマップ私鉄沿線開発シミュレーション</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+      font-family: "Inter", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: #f8fafc;
+      user-select: none;
+    }
+    #app-shell {
+      width: 100%;
+      max-width: 460px;
+      height: 100dvh;
+      max-height: 100vh;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      background: #0f172a;
+      position: relative;
+      box-shadow: 0 0 40px rgba(0,0,0,0.65);
+    }
+    @media (min-width: 520px) {
+      body {
+        background: radial-gradient(circle at 50% 20%, #1e293b 0%, #090d16 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #app-shell {
+        height: min(96vh, 880px);
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+      }
+    }
+    #map-wrapper {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 260px;
+      background: #eef2f6;
+      overflow: hidden;
+    }
+    #map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .maplibregl-ctrl-bottom-left,
+    .maplibregl-ctrl-bottom-right {
+      display: none !important;
+    }
+    #panel-area {
+      height: 41%;
+      min-height: 255px;
+      max-height: 360px;
+      background: #0f172a;
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+    }
+    .panel-scroll {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: #334155 transparent;
+    }
+    .panel-scroll::-webkit-scrollbar { width: 4px; }
+    .panel-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .tab-btn.active {
+      color: #38bdf8;
+      border-top: 2px solid #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .speed-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+    }
+    #toast-box {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      pointer-events: none;
+      width: 90%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .toast-item {
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(56, 189, 248, 0.55);
+      color: #f8fafc;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+      animation: fadeSlide 0.2s ease-out;
+    }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .station-pill-marker {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      background: rgba(15, 23, 42, 0.9);
+      color: #ffffff;
+      border: 1.5px solid #38bdf8;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+      cursor: pointer;
+      transition: transform 0.12s ease;
+    }
+    .station-pill-marker.selected {
+      background: #0284c7;
+      border-color: #ffffff;
+      transform: scale(1.08);
+    }
+    .station-pill-marker.direct {
+      border-color: #f59e0b;
+    }
+  </style>
+</head>
+<body>
+  <div id="app-shell">
+    <!-- 上部ステータスHUD -->
+    <header class="bg-slate-900/95 border-b border-slate-700/60 px-3 py-2 flex items-center justify-between gap-2 shrink-0 z-30">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span id="hud-date" class="text-xs font-bold text-sky-300 tracking-wide">2026年4月</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">東京西南部・実在2.5D</span>
+          </div>
+          <div class="flex items-baseline gap-2 mt-0.5">
+            <span id="hud-funds" class="text-sm font-extrabold text-emerald-400 tabular-nums">450.0億円</span>
+            <span id="hud-pop" class="text-[11px] font-semibold text-slate-200 tabular-nums">沿線 21.4万人</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button id="btn-speed-0" class="speed-btn px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700" title="一時停止">Ⅱ</button>
+        <button id="btn-speed-1" class="speed-btn active px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700" title="通常速度">1x</button>
+        <button id="btn-speed-3" class="speed-btn px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700" title="3倍速">3x</button>
+        <button id="btn-mute" class="ml-0.5 px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 border border-slate-700" title="効果音切替">🔊</button>
+        <button id="btn-help" class="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-sky-300 border border-slate-700" title="遊び方">?</button>
+      </div>
+    </header>
+
+    <!-- 実在2.5Dマップ領域（MapLibre GL JS） -->
+    <main id="map-wrapper">
+      <div id="map"></div>
+      <div id="toast-box"></div>
+
+      <!-- モードバナー（延伸モード中） -->
+      <div id="mode-banner" class="hidden absolute top-2 left-2 right-14 bg-sky-600/95 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg flex items-center justify-between gap-2 z-20">
+        <span id="mode-banner-text">実在マップをタップして新駅・線路を延伸</span>
+        <button id="btn-cancel-mode" class="bg-slate-900/40 hover:bg-slate-900/60 px-2 py-0.5 rounded text-[11px]">終了</button>
+      </div>
+
+      <!-- マップ右上フローティング操作（Subway Builder風ライトグラス） -->
+      <div class="absolute top-2.5 right-2.5 flex flex-col gap-1.5 z-20">
+        <button id="btn-zoom-in" class="w-8 h-8 rounded-lg bg-white/95 text-slate-800 font-bold text-sm border border-slate-300 shadow active:scale-95" title="拡大">＋</button>
+        <button id="btn-zoom-out" class="w-8 h-8 rounded-lg bg-white/95 text-slate-800 font-bold text-sm border border-slate-300 shadow active:scale-95" title="縮小">－</button>
+        <button id="btn-view-toggle" class="w-8 h-8 rounded-lg bg-white/95 text-sky-700 font-extrabold text-[10px] border border-slate-300 shadow active:scale-95" title="2.5D/2D切替">2.5D</button>
+        <button id="btn-layer-speed" class="w-8 h-8 rounded-lg bg-white/95 text-emerald-700 font-extrabold text-[9px] border border-slate-300 shadow active:scale-95" title="速度ヒート表示切替">速度</button>
+        <button id="btn-center" class="w-8 h-8 rounded-lg bg-white/95 text-slate-700 text-xs border border-slate-300 shadow active:scale-95" title="視点リセット">⌖</button>
+      </div>
+
+      <!-- 左下：選択地点のミニ情報チップ -->
+      <div id="map-info-chip" class="absolute bottom-2 left-2 bg-white/95 border border-slate-300/90 backdrop-blur px-2.5 py-1.5 rounded-xl text-[11px] max-w-[74%] shadow-md z-20 text-slate-800">
+        <div class="font-extrabold text-slate-900" id="chip-title">多摩川新線 運行中</div>
+        <div class="text-slate-600 text-[10px] mt-0.5" id="chip-sub">実在地図上の駅や街をタップして確認・延伸</div>
+      </div>
+
+      <!-- 右下：Subway Builder風ミニ凡例 -->
+      <div class="absolute bottom-2 right-2 bg-white/92 border border-slate-300/80 px-2 py-1 rounded-lg text-[9px] text-slate-700 flex flex-col gap-0.5 z-10 pointer-events-none shadow-sm">
+        <div class="flex items-center gap-1"><span class="inline-block w-2.5 h-1 bg-emerald-500 rounded"></span>自社線/速度</div>
+        <div class="flex items-center gap-1"><span class="inline-block w-2.5 h-1 bg-pink-500 rounded"></span>既存他社線</div>
+        <div class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-amber-500 bg-amber-300/40"></span>直通可</div>
+      </div>
+    </main>
+
+    <!-- 下部操作パネル -->
+    <section id="panel-area">
+      <div id="panel-content" class="panel-scroll px-3 py-2.5"></div>
+
+      <!-- 下部4タブナビゲーション -->
+      <nav class="grid grid-cols-4 bg-slate-950 border-t border-slate-800 shrink-0">
+        <button data-tab="route" class="tab-btn active py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
+          <span class="text-sm leading-none">🚉</span>
+          <span class="text-[10px] font-bold">路線・駅</span>
+        </button>
+        <button data-tab="service" class="tab-btn py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
+          <span class="text-sm leading-none">🚄</span>
+          <span class="text-[10px] font-bold">種別・直通</span>
+        </button>
+        <button data-tab="dev" class="tab-btn py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
+          <span class="text-sm leading-none">🏙️</span>
+          <span class="text-[10px] font-bold">沿線開発</span>
+        </button>
+        <button data-tab="finance" class="tab-btn py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
+          <span class="text-sm leading-none">📊</span>
+          <span class="text-[10px] font-bold">経営・統計</span>
+        </button>
+      </nav>
+    </section>
+
+    <!-- 遊び方モーダル -->
+    <div id="help-modal" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-4 shadow-2xl max-h-[85%] overflow-y-auto">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-extrabold text-sky-300">沿線デベロッパー TOKYO WEST</h2>
+          <button id="btn-close-help" class="text-slate-400 hover:text-white text-base font-bold px-2">✕</button>
+        </div>
+        <p class="text-xs text-slate-300 leading-relaxed mb-2.5">
+          実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、私鉄路線と沿線の街を育てる2.5Dシミュレーションです。
+        </p>
+        <ul class="text-xs text-slate-300 space-y-1.5 list-disc pl-4 mb-3">
+          <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。二本指または右ドラッグで回転・傾きも調整可能です。</li>
+          <li><strong class="text-white">路線・直通</strong>: 「＋新駅を延伸」で地図上の好きな場所へ延伸。既存路線駅（二子玉川・調布・登戸・新百合ヶ丘・多摩センター・町田など）付近に繋ぐと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
+          <li><strong class="text-white">種別・待避線</strong>: 急行や特急の停車駅をタップで設定。途中に<strong class="text-sky-300">2面4線（待避線）</strong>があると速達効果がフル発揮され、遠方の都心体感時間が大幅短縮します。</li>
+          <li><strong class="text-white">沿線開発</strong>: 駅ごとの開発方針で周辺に3D開発ビルが自動成長し、大型ランドマークを直接建てて街の目玉を作れます。</li>
+        </ul>
+        <button id="btn-start-play" class="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">プレイに戻る</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // =========================================================================
+  // 1. 効果音（Web Audio API）
+  // =========================================================================
+  let audioCtx = null;
+  let isMuted = false;
+
+  function ensureAudio() {
+    if (isMuted) return null;
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
+  function playSfx(type) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'tap') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(680, now + 0.05);
+      gain.gain.setValueAtTime(0.06, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.start(now);
+      osc.stop(now + 0.065);
+    } else if (type === 'build') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(360, now);
+      osc.frequency.setValueAtTime(540, now + 0.06);
+      osc.frequency.setValueAtTime(720, now + 0.12);
+      gain.gain.setValueAtTime(0.11, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } else if (type === 'direct') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(554.37, now + 0.08);
+      osc.frequency.setValueAtTime(659.25, now + 0.16);
+      osc.frequency.setValueAtTime(880, now + 0.24);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+      osc.start(now);
+      osc.stop(now + 0.44);
+    } else if (type === 'error') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(190, now);
+      osc.frequency.linearRampToValueAtTime(130, now + 0.14);
+      gain.gain.setValueAtTime(0.07, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      osc.start(now);
+      osc.stop(now + 0.17);
+    } else if (type === 'month') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(620, now);
+      osc.frequency.setValueAtTime(780, now + 0.05);
+      gain.gain.setValueAtTime(0.04, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.13);
+    }
+  }
+
+  // =========================================================================
+  // 2. 実在データ（東京都統計2026・川崎市統計・実測WGS84座標）
+  // =========================================================================
+  const MUNICIPALITIES = [
+    { id: 'shinjuku', name: '新宿区', pop: 359931, area: 18.22, lat: 35.6900, lng: 139.7005, commBase: 98, priceBase: 95 },
+    { id: 'shibuya', name: '渋谷区', pop: 243865, area: 15.11, lat: 35.6586, lng: 139.7011, commBase: 95, priceBase: 92 },
+    { id: 'suginami', name: '杉並区', pop: 599035, area: 34.06, lat: 35.6950, lng: 139.6360, commBase: 54, priceBase: 62 },
+    { id: 'setagaya', name: '世田谷区', pop: 950073, area: 58.05, lat: 35.6420, lng: 139.6450, commBase: 66, priceBase: 72 },
+    { id: 'musashino', name: '武蔵野市', pop: 150430, area: 10.98, lat: 35.7020, lng: 139.5660, commBase: 68, priceBase: 65 },
+    { id: 'mitaka', name: '三鷹市', pop: 196412, area: 16.42, lat: 35.6830, lng: 139.5600, commBase: 48, priceBase: 55 },
+    { id: 'chofu', name: '調布市', pop: 246052, area: 21.58, lat: 35.6510, lng: 139.5450, commBase: 55, priceBase: 52 },
+    { id: 'komae', name: '狛江市', pop: 83670, area: 6.39, lat: 35.6340, lng: 139.5780, commBase: 36, priceBase: 46 },
+    { id: 'fuchu', name: '府中市', pop: 264628, area: 29.43, lat: 35.6694, lng: 139.4775, commBase: 52, priceBase: 45 },
+    { id: 'inagi', name: '稲城市', pop: 95561, area: 17.97, lat: 35.6360, lng: 139.4995, commBase: 28, priceBase: 32 },
+    { id: 'tama', name: '多摩市', pop: 146593, area: 21.01, lat: 35.6240, lng: 139.4229, commBase: 44, priceBase: 34 },
+    { id: 'machida', name: '町田市', pop: 432307, area: 71.55, lat: 35.5467, lng: 139.4386, commBase: 62, priceBase: 38 },
+    { id: 'kw_tama', name: '川崎市多摩区', pop: 228812, area: 20.50, lat: 35.6160, lng: 139.5650, commBase: 45, priceBase: 44 },
+    { id: 'kw_asao', name: '川崎市麻生区', pop: 180000, area: 23.25, lat: 35.6039, lng: 139.5078, commBase: 48, priceBase: 42 }
+  ];
+
+  const EXISTING_STATIONS = [
+    { id: 'ex_shinjuku', name: '新宿', lat: 35.6900, lng: 139.7005, hub: true, hubCost: 0, lines: ['京王線', '小田急線'], directCost: 120, directFee: 6.0, directSlots: 10 },
+    { id: 'ex_shibuya', name: '渋谷', lat: 35.6586, lng: 139.7011, hub: true, hubCost: 0, lines: ['東急田園都市線'], directCost: 110, directFee: 5.5, directSlots: 10 },
+    { id: 'ex_yoga', name: '用賀', lat: 35.6264, lng: 139.6339, hub: false, hubCost: 13, lines: ['東急田園都市線'], directCost: 75, directFee: 4.0, directSlots: 8 },
+    { id: 'ex_futako', name: '二子玉川', lat: 35.6114, lng: 139.6268, hub: false, hubCost: 16, lines: ['東急田園都市線'], directCost: 65, directFee: 3.5, directSlots: 8 },
+    { id: 'ex_tsutsuji', name: 'つつじヶ丘', lat: 35.6581, lng: 139.5750, hub: false, hubCost: 19, lines: ['京王線'], directCost: 65, directFee: 3.2, directSlots: 6 },
+    { id: 'ex_chofu', name: '調布', lat: 35.6518, lng: 139.5441, hub: false, hubCost: 22, lines: ['京王線'], directCost: 70, directFee: 3.5, directSlots: 8 },
+    { id: 'ex_tobitakyu', name: '飛田給', lat: 35.6602, lng: 139.5233, hub: false, hubCost: 26, lines: ['京王線'], directCost: 60, directFee: 3.0, directSlots: 6 },
+    { id: 'ex_fuchu', name: '府中', lat: 35.6721, lng: 139.4803, hub: false, hubCost: 29, lines: ['京王線'], directCost: 60, directFee: 3.0, directSlots: 6 },
+    { id: 'ex_noborito', name: '登戸', lat: 35.6208, lng: 139.5700, hub: false, hubCost: 21, lines: ['小田急線', 'JR南武線'], directCost: 70, directFee: 3.5, directSlots: 8 },
+    { id: 'ex_shinyuri', name: '新百合ヶ丘', lat: 35.6039, lng: 139.5078, hub: false, hubCost: 27, lines: ['小田急線'], directCost: 65, directFee: 3.2, directSlots: 8 },
+    { id: 'ex_inagi', name: '稲城', lat: 35.6360, lng: 139.4995, hub: false, hubCost: 31, lines: ['京王相模原線'], directCost: 55, directFee: 2.8, directSlots: 6 },
+    { id: 'ex_wakabadai', name: '若葉台', lat: 35.6193, lng: 139.4725, hub: false, hubCost: 34, lines: ['京王相模原線'], directCost: 50, directFee: 2.5, directSlots: 6 },
+    { id: 'ex_tamacenter', name: '多摩センター', lat: 35.6240, lng: 139.4229, hub: false, hubCost: 38, lines: ['京王相模原線', '小田急多摩線'], directCost: 55, directFee: 2.8, directSlots: 6 },
+    { id: 'ex_machida', name: '町田', lat: 35.5435, lng: 139.4454, hub: false, hubCost: 37, lines: ['小田急線'], directCost: 65, directFee: 3.0, directSlots: 6 }
+  ];
+
+  const EXISTING_LINES = [
+    { name: '京王線', color: '#db2777', stations: ['ex_shinjuku', 'ex_tsutsuji', 'ex_chofu', 'ex_tobitakyu', 'ex_fuchu'] },
+    { name: '京王相模原線', color: '#ec4899', stations: ['ex_chofu', 'ex_inagi', 'ex_wakabadai', 'ex_tamacenter'] },
+    { name: '小田急線', color: '#2563eb', stations: ['ex_shinjuku', 'ex_noborito', 'ex_shinyuri', 'ex_machida'] },
+    { name: '小田急多摩線', color: '#3b82f6', stations: ['ex_shinyuri', 'ex_tamacenter'] },
+    { name: '東急田園都市線', color: '#16a34a', stations: ['ex_shibuya', 'ex_yoga', 'ex_futako'] },
+    { name: 'JR南武線', color: '#eab308', stations: ['ex_fuchu', 'ex_inagi', 'ex_noborito', 'ex_futako'] }
+  ];
+
+  const ZONINGS = {
+    residential: { id: 'residential', name: '住宅重視', color: '#f59e0b', desc: '人口流入+35% / 朝夕通勤需要UP', popMult: 1.35, commMult: 0.9 },
+    commercial:  { id: 'commercial',  name: '商業重視', color: '#0ea5e9', desc: '魅力度+35% / 駅ナカ・商業収益UP', popMult: 1.0, commMult: 1.35 },
+    office:      { id: 'office',      name: 'オフィス', color: '#6366f1', desc: '魅力度+40% / 都心逆方向需要UP', popMult: 0.85, commMult: 1.4 },
+    tourism:     { id: 'tourism',     name: '観光・自然', color: '#10b981', desc: '休日下り需要UP / 住環境ボーナス', popMult: 1.1, commMult: 1.15 }
+  };
+
+  const LANDMARKS = [
+    { id: 'dept', name: '駅直結商業ビル', icon: '🏬', cost: 45, upkeep: 1.2, popAdd: 300, commAdd: 22, revAdd: 3.8, weekendBoost: 1.15, color: '#0ea5e9', desc: '商業魅力度と月間不動産収益を大きく底上げ' },
+    { id: 'tower', name: 'タワーマンション群', icon: '🏙️', cost: 55, upkeep: 1.0, popAdd: 4800, commAdd: 8, revAdd: 3.2, weekendBoost: 1.0, color: '#f59e0b', desc: '駅勢圏の居住人口を即座に大幅増加' },
+    { id: 'univ', name: '私立大学キャンパス', icon: '🎓', cost: 65, upkeep: 1.5, popAdd: 1800, commAdd: 26, revAdd: 2.5, weekendBoost: 1.1, color: '#a855f7', desc: '郊外でも安定した通学・下り需要を創出' },
+    { id: 'park', name: '大型テーマパーク', icon: '🎡', cost: 90, upkeep: 2.4, popAdd: 500, commAdd: 38, revAdd: 5.5, weekendBoost: 1.55, color: '#f43f5e', desc: '休日の下り特急・急行需要を爆発的に増加' },
+    { id: 'outlet', name: 'アウトレットモール', icon: '🛍️', cost: 70, upkeep: 1.8, popAdd: 400, commAdd: 30, revAdd: 4.8, weekendBoost: 1.38, color: '#14b8a6', desc: '広域から買い物客を集め商業収益を拡大' },
+    { id: 'stadium', name: '多目的スタジアム', icon: '🏟️', cost: 85, upkeep: 2.0, popAdd: 600, commAdd: 34, revAdd: 4.6, weekendBoost: 1.45, color: '#f97316', desc: 'イベント時の爆発的な乗降客と話題性を獲得' }
+  ];
+
+  // =========================================================================
+  // 3. 地理計算ユーティリティ
+  // =========================================================================
+  function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function getNearestMunicipality(lat, lng) {
+    let best = MUNICIPALITIES[0];
+    let bestDist = Infinity;
+    for (const m of MUNICIPALITIES) {
+      const d = haversineKm(lat, lng, m.lat, m.lng);
+      if (d < bestDist) {
+        bestDist = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  function getNearestExistingStation(lat, lng, maxKm = 0.85) {
+    let best = null;
+    let bestDist = maxKm;
+    for (const ex of EXISTING_STATIONS) {
+      const d = haversineKm(lat, lng, ex.lat, ex.lng);
+      if (d < bestDist) {
+        bestDist = d;
+        best = ex;
+      }
+    }
+    return best;
+  }
+
+  // 指定緯度経度の周囲に3D押し出しポリゴン（矩形）を作る
+  function makeBuildingPolygon(lng, lat, halfW_m, halfH_m, offsetLng_m = 0, offsetLat_m = 0) {
+    const mPerDegLat = 111320;
+    const mPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
+    const cLng = lng + offsetLng_m / mPerDegLng;
+    const cLat = lat + offsetLat_m / mPerDegLat;
+    const dLng = halfW_m / mPerDegLng;
+    const dLat = halfH_m / mPerDegLat;
+    return [[
+      [cLng - dLng, cLat - dLat],
+      [cLng + dLng, cLat - dLat],
+      [cLng + dLng, cLat + dLat],
+      [cLng - dLng, cLat + dLat],
+      [cLng - dLng, cLat - dLat]
+    ]];
+  }
+
+  // =========================================================================
+  // 4. ゲーム状態（State）
+  // =========================================================================
+  const state = {
+    year: 2026,
+    month: 4,
+    tickInMonth: 0,
+    speed: 1,
+    funds: 450.0,
+    activeTab: 'route',
+    buildMode: null,
+    selectedPoint: null, // { lat, lng, muni }
+    selectedStationId: null,
+    is25D: true,
+    showSpeedHeat: true,
+
+    myStations: [],
+    directAgreements: {},
+    services: [
+      { id: 'local',   name: '各停', color: '#38bdf8', speed: 42, freq: 6, enabled: true,  direct: false, surcharge: 0,   stops: {} },
+      { id: 'semi',    name: '準急', color: '#22c55e', speed: 55, freq: 4, enabled: false, direct: false, surcharge: 0,   stops: {} },
+      { id: 'express', name: '急行', color: '#f97316', speed: 70, freq: 4, enabled: false, direct: false, surcharge: 0,   stops: {} },
+      { id: 'limited', name: '特急', color: '#a855f7', speed: 88, freq: 2, enabled: false, direct: false, surcharge: 450, stops: {} }
+    ],
+    trains: [],
+    finance: {
+      fareRev: 0,
+      expressRev: 0,
+      estateRev: 0,
+      trackCost: 0,
+      opCost: 0,
+      directCost: 0,
+      landmarkCost: 0,
+      netProfit: 0
+    },
+    history: {
+      labels: [],
+      corridorPop: [],
+      profit: []
+    },
+    initialCorridorPop: 0
+  };
+
+  function createStationState({ id, name, lat, lng, hasPassing, existingId, zoning }) {
+    const muni = getNearestMunicipality(lat, lng);
+    const density = muni.pop / muni.area; // 人/km²
+    // 駅勢圏（半径約1km ≈ 3.14km²）の実在人口ベース初期値
+    const areaPop = Math.round(density * 2.65);
+    const exBoost = existingId ? 16 : 0;
+    return {
+      id,
+      name,
+      lat,
+      lng,
+      muniId: muni.id,
+      muniName: muni.name,
+      hasPassing: !!hasPassing,
+      existingId: existingId || null,
+      zoning: zoning || (muni.commBase > 58 ? 'commercial' : 'residential'),
+      landmark: null,
+      areaPop,
+      initialPop: areaPop,
+      comm: Math.min(100, Math.round(muni.commBase * 0.8 + exBoost)),
+      landPrice: Math.round(muni.priceBase * (existingId ? 1.2 : 0.95)),
+      ridership: 0,
+      hubTime: 48,
+      congestion: 80,
+      accessScore: 55,
+      devLevel: 0 // 0〜100（沿線開発の成長度合い・3Dビル高さに直結）
+    };
+  }
+
+  function initWorld() {
+    const futako = EXISTING_STATIONS.find(s => s.id === 'ex_futako');
+    const tamaC = EXISTING_STATIONS.find(s => s.id === 'ex_tamacenter');
+
+    const starterSpecs = [
+      { id: 'st_1', name: '二子玉川', lat: futako.lat, lng: futako.lng, hasPassing: true, existingId: futako.id, zoning: 'commercial' },
+      { id: 'st_2', name: '狛江南', lat: 35.6295, lng: 139.5760, hasPassing: false, existingId: null, zoning: 'residential' },
+      { id: 'st_3', name: '稲城中央', lat: 35.6362, lng: 139.5060, hasPassing: false, existingId: null, zoning: 'residential' },
+      { id: 'st_4', name: '多摩センター', lat: tamaC.lat, lng: tamaC.lng, hasPassing: true, existingId: tamaC.id, zoning: 'tourism' }
+    ];
+
+    state.myStations = starterSpecs.map(spec => createStationState(spec));
+
+    state.myStations.forEach((st, idx) => {
+      const isEnd = idx === 0 || idx === state.myStations.length - 1;
+      state.services[0].stops[st.id] = true;
+      state.services[1].stops[st.id] = isEnd || idx === 2;
+      state.services[2].stops[st.id] = isEnd;
+      state.services[3].stops[st.id] = isEnd;
+    });
+
+    state.selectedStationId = state.myStations[2].id;
+    state.selectedPoint = { lat: state.myStations[2].lat, lng: state.myStations[2].lng, muni: getNearestMunicipality(state.myStations[2].lat, state.myStations[2].lng) };
+
+    recalculateSimulation(false);
+    state.initialCorridorPop = getCorridorPop();
+    recordHistory();
+    rebuildTrainActors();
+  }
+
+  // =========================================================================
+  // 5. シミュレーション計算エンジン
+  // =========================================================================
+  function getCorridorPop() {
+    return state.myStations.reduce((acc, st) => acc + st.areaPop, 0);
+  }
+
+  function getConnectedDirectStations() {
+    return state.myStations.filter(st => st.existingId && state.directAgreements[st.existingId]);
+  }
+
+  function hasIntermediatePassingTrack() {
+    if (state.myStations.length <= 2) return true;
+    for (let i = 1; i < state.myStations.length - 1; i++) {
+      if (state.myStations[i].hasPassing) return true;
+    }
+    return false;
+  }
+
+  function getLineLengthKm() {
+    let km = 0;
+    for (let i = 0; i < state.myStations.length - 1; i++) {
+      const a = state.myStations[i];
+      const b = state.myStations[i + 1];
+      km += haversineKm(a.lat, a.lng, b.lat, b.lng);
+    }
+    return km;
+  }
+
+  function recalculateSimulation(advanceGrowth) {
+    const n = state.myStations.length;
+    if (n === 0) return;
+
+    const hasPassing = hasIntermediatePassingTrack();
+    const activeServices = state.services.filter(s => s.enabled && s.freq > 0);
+    const hasAnyDirectAgreement = getConnectedDirectStations().length > 0;
+
+    const cumKm = [0];
+    for (let i = 1; i < n; i++) {
+      const a = state.myStations[i - 1];
+      const b = state.myStations[i];
+      cumKm.push(cumKm[i - 1] + haversineKm(a.lat, a.lng, b.lat, b.lng));
+    }
+
+    const gateways = [];
+    state.myStations.forEach((st, idx) => {
+      if (st.existingId) {
+        const ex = EXISTING_STATIONS.find(e => e.id === st.existingId);
+        if (ex) {
+          gateways.push({
+            idx,
+            st,
+            ex,
+            isDirect: !!state.directAgreements[ex.id]
+          });
+        }
+      }
+    });
+
+    let totalFareRev = 0;
+    let totalExpressRev = 0;
+    let totalEstateRev = 0;
+    let totalLandmarkUpkeep = 0;
+    let totalWeekendAttr = 0;
+
+    state.myStations.forEach(st => {
+      if (st.landmark) {
+        const lm = LANDMARKS.find(l => l.id === st.landmark);
+        if (lm) {
+          totalWeekendAttr += lm.commAdd * lm.weekendBoost;
+          totalLandmarkUpkeep += lm.upkeep;
+        }
+      }
+    });
+
+    state.myStations.forEach((st, i) => {
+      let freqAtSt = 0;
+      let expressFreqAtSt = 0;
+      activeServices.forEach(sv => {
+        if (sv.stops[st.id]) {
+          freqAtSt += sv.freq;
+          if (sv.surcharge > 0) expressFreqAtSt += sv.freq;
+        }
+      });
+
+      const waitMin = freqAtSt > 0 ? Math.min(25, 30 / freqAtSt) : 35;
+      let bestHubTime = 78;
+
+      if (gateways.length > 0 && freqAtSt > 0) {
+        for (const gw of gateways) {
+          const distKm = Math.abs(cumKm[i] - cumKm[gw.idx]);
+          let bestRunMin = Infinity;
+          let canDirectHere = false;
+
+          activeServices.forEach(sv => {
+            if (sv.stops[st.id] && sv.stops[gw.st.id]) {
+              const isFast = sv.speed > 45;
+              const effSpeed = isFast && !hasPassing
+                ? 42 + (sv.speed - 42) * 0.35
+                : sv.speed;
+              const runMin = (distKm / effSpeed) * 60;
+              if (runMin < bestRunMin) bestRunMin = runMin;
+              if (gw.isDirect && sv.direct) canDirectHere = true;
+            }
+          });
+
+          if (!isFinite(bestRunMin)) {
+            bestRunMin = (distKm / 42) * 60 + 5;
+          }
+
+          const transferPenalty = gw.ex.hub ? 0 : (canDirectHere ? 0 : 10);
+          const totalMin = gw.ex.hubCost + bestRunMin + waitMin + transferPenalty;
+          if (totalMin < bestHubTime) bestHubTime = totalMin;
+        }
+      }
+
+      const lm = st.landmark ? LANDMARKS.find(l => l.id === st.landmark) : null;
+      const lmRev = lm ? lm.revAdd : 0;
+      const lmWeekend = lm ? lm.weekendBoost : 1.0;
+
+      const rawAccess = Math.max(5, Math.min(100, 108 - (bestHubTime - 12) * 1.45));
+      const commutingDemand = st.areaPop * (rawAccess / 100) * 0.32;
+      const incomingDemand = (st.comm * 160) * (rawAccess / 100) * lmWeekend + (totalWeekendAttr * 18);
+      const serviceFactor = freqAtSt > 0 ? Math.min(1.25, 0.55 + freqAtSt * 0.05) : 0.05;
+      const ridership = Math.round((commutingDemand + incomingDemand) * serviceFactor);
+
+      const hourlyCapacity = Math.max(1200, freqAtSt * 1450);
+      const peakDemand = ridership * 0.14;
+      const congestion = Math.min(220, Math.round((peakDemand / hourlyCapacity) * 100));
+      const congPenalty = congestion > 120 ? (congestion - 120) * 0.12 : 0;
+
+      const finalHubTime = Math.round(bestHubTime + congPenalty);
+      const finalAccess = Math.max(5, Math.min(100, Math.round(108 - (finalHubTime - 12) * 1.45)));
+
+      st.ridership = ridership;
+      st.hubTime = finalHubTime;
+      st.congestion = congestion;
+      st.accessScore = finalAccess;
+
+      totalFareRev += (ridership * 240 * 30) / 1e8;
+      if (expressFreqAtSt > 0) {
+        const expRiders = ridership * Math.min(0.24, expressFreqAtSt * 0.045) * lmWeekend;
+        totalExpressRev += (expRiders * 450 * 30) / 1e8;
+      }
+      totalEstateRev += (st.comm * 0.025) + (st.devLevel * 0.04) + lmRev;
+
+      if (advanceGrowth) {
+        const z = ZONINGS[st.zoning] || ZONINGS.residential;
+        const growthDrive = (finalAccess - 44) / 100;
+        const congDrag = congestion > 155 ? -0.15 : 0;
+        const cap = 125000;
+        const headroom = Math.max(0.06, 1 - st.areaPop / cap);
+        const deltaRate = (growthDrive + congDrag) * 0.011 * z.popMult * headroom;
+        const popDelta = Math.round(st.areaPop * deltaRate);
+        st.areaPop = Math.max(3000, st.areaPop + popDelta);
+
+        const commDelta = growthDrive > 0 ? growthDrive * 0.8 * z.commMult : -0.05;
+        st.comm = Math.max(12, Math.min(100, st.comm + commDelta));
+        st.landPrice = Math.max(18, Math.min(120, st.landPrice + (popDelta > 0 ? 0.18 : 0)));
+
+        // 沿線開発レベル（3D新規ビル群の高さ成長）
+        if (growthDrive > 0) {
+          st.devLevel = Math.min(100, st.devLevel + growthDrive * 3.2 * (lm ? 1.35 : 1.0));
+        }
+      }
+    });
+
+    const lineKm = getLineLengthKm();
+    const passingCount = state.myStations.filter(s => s.hasPassing).length;
+    const trackCost = lineKm * 0.22 + state.myStations.length * 0.45 + passingCount * 0.35;
+
+    let totalFreq = 0;
+    let directFreq = 0;
+    activeServices.forEach(sv => {
+      totalFreq += sv.freq;
+      if (sv.direct && hasAnyDirectAgreement) directFreq += sv.freq;
+    });
+    const opCost = totalFreq * (0.28 + lineKm * 0.025);
+
+    let directFee = 0;
+    getConnectedDirectStations().forEach(st => {
+      const ex = EXISTING_STATIONS.find(e => e.id === st.existingId);
+      if (ex) directFee += ex.directFee * (directFreq > 0 ? 1 : 0.35);
+    });
+
+    const totalRev = totalFareRev + totalExpressRev + totalEstateRev;
+    const totalExp = trackCost + opCost + directFee + totalLandmarkUpkeep;
+    const netProfit = totalRev - totalExp;
+
+    state.finance = {
+      fareRev: totalFareRev,
+      expressRev: totalExpressRev,
+      estateRev: totalEstateRev,
+      trackCost,
+      opCost,
+      directCost: directFee,
+      landmarkCost: totalLandmarkUpkeep,
+      netProfit
+    };
+
+    if (advanceGrowth) {
+      state.funds = Math.round((state.funds + netProfit) * 10) / 10;
+    }
+  }
+
+  function recordHistory() {
+    state.history.labels.push(`${state.year}/${state.month}`);
+    state.history.corridorPop.push(getCorridorPop());
+    state.history.profit.push(Math.round(state.finance.netProfit * 10) / 10);
+    if (state.history.labels.length > 36) {
+      state.history.labels.shift();
+      state.history.corridorPop.shift();
+      state.history.profit.shift();
+    }
+  }
+
+  function rebuildTrainActors() {
+    const actors = [];
+    if (state.myStations.length < 2) {
+      state.trains = [];
+      return;
+    }
+    state.services.forEach(sv => {
+      if (!sv.enabled || sv.freq <= 0) return;
+      const count = Math.max(1, Math.min(4, Math.ceil(sv.freq / 3)));
+      for (let i = 0; i < count; i++) {
+        actors.push({
+          serviceId: sv.id,
+          color: sv.color,
+          speed: sv.speed,
+          progress: (i / count) * (state.myStations.length - 1),
+          dir: i % 2 === 0 ? 1 : -1
+        });
+      }
+    });
+    state.trains = actors;
+  }
+
+  // =========================================================================
+  // 6. MapLibre GL JS 実在2.5Dマップ（Subway Builder風スタイル）
+  // =========================================================================
+  let map = null;
+  let mapReady = false;
+  let stationMarkers = [];
+
+  const FALLBACK_RASTER_STYLE = {
+    version: 8,
+    sources: {
+      'arcgis-gray': {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}.jpg'],
+        tileSize: 256,
+        attribution: 'Esri'
+      }
+    },
+    layers: [{ id: 'arcgis-gray-layer', type: 'raster', source: 'arcgis-gray' }]
+  };
+
+  function initMap() {
+    if (typeof maplibregl === 'undefined') {
+      showToast('地図ライブラリの読み込みに失敗しました');
+      return;
+    }
+
+    map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [139.572, 35.623],
+      zoom: 13.6,
+      pitch: 58,
+      bearing: -18,
+      antialias: true,
+      maxPitch: 70
+    });
+
+    let fallbackTriggered = false;
+    function triggerFallback() {
+      if (mapReady || fallbackTriggered) return;
+      fallbackTriggered = true;
+      try { map.setStyle(FALLBACK_RASTER_STYLE); } catch (_) {}
+    }
+
+    const fallbackTimer = setTimeout(triggerFallback, 3500);
+    map.on('error', () => {
+      if (!mapReady) triggerFallback();
+    });
+
+    map.on('style.load', () => {
+      clearTimeout(fallbackTimer);
+      // Subway Builder風のクリーンな建築模型トーンに実在3D建物を調整
+      try {
+        const styleObj = map.getStyle();
+        const layers = (styleObj && styleObj.layers) || [];
+        let has3D = false;
+        layers.forEach(l => {
+          if (l.type === 'fill-extrusion') {
+            has3D = true;
+            map.setPaintProperty(l.id, 'fill-extrusion-color', [
+              'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 12],
+              0, '#f8fafc',
+              25, '#e2e8f0',
+              70, '#cbd5e1'
+            ]);
+            map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.9);
+          }
+        });
+        if (!has3D && styleObj && styleObj.sources && styleObj.sources.openmaptiles) {
+          map.addLayer({
+            id: 'custom-real-buildings-3d',
+            type: 'fill-extrusion',
+            source: 'openmaptiles',
+            'source-layer': 'building',
+            minzoom: 12.5,
+            paint: {
+              'fill-extrusion-color': '#e2e8f0',
+              'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 12],
+              'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+              'fill-extrusion-opacity': 0.88
+            }
+          });
+        }
+      } catch (_) {}
+
+      setupGameMapLayers();
+      mapReady = true;
+      syncMapGeoJSON();
+      syncStationMarkers();
+    });
+
+    map.on('click', (e) => {
+      const lat = e.lngLat.lat;
+      const lng = e.lngLat.lng;
+      if (state.buildMode === 'extend') {
+        tryExtendToLatLng(lat, lng);
+      } else {
+        // 近い自社駅があればそれを選択
+        let hitMy = null;
+        let bestD = 0.65;
+        state.myStations.forEach(st => {
+          const d = haversineKm(lat, lng, st.lat, st.lng);
+          if (d < bestD) { bestD = d; hitMy = st; }
+        });
+        if (hitMy) {
+          state.selectedStationId = hitMy.id;
+          state.selectedPoint = { lat: hitMy.lat, lng: hitMy.lng, muni: getNearestMunicipality(hitMy.lat, hitMy.lng) };
+        } else {
+          state.selectedPoint = { lat, lng, muni: getNearestMunicipality(lat, lng) };
+        }
+        playSfx('tap');
+        updateHUD();
+        renderPanel();
+        syncStationMarkers();
+      }
+    });
+  }
+
+  function setupGameMapLayers() {
+    // 1. 既存他社路線
+    if (!map.getSource('existing-lines')) {
+      map.addSource('existing-lines', { type: 'geojson', data: buildExistingLinesGeoJSON() });
+      map.addLayer({
+        id: 'existing-lines-layer',
+        type: 'line',
+        source: 'existing-lines',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 3.5],
+          'line-opacity': 0.55,
+          'line-dasharray': [2.5, 1.8]
+        }
+      });
+    }
+
+    // 2. 既存駅ドット
+    if (!map.getSource('existing-stations')) {
+      map.addSource('existing-stations', { type: 'geojson', data: buildExistingStationsGeoJSON() });
+      map.addLayer({
+        id: 'existing-stations-circle',
+        type: 'circle',
+        source: 'existing-stations',
+        paint: {
+          'circle-radius': ['case', ['get', 'hub'], 6.5, 4.5],
+          'circle-color': ['case', ['get', 'hub'], '#0f172a', '#ffffff'],
+          'circle-stroke-color': ['case', ['get', 'hub'], '#f59e0b', '#475569'],
+          'circle-stroke-width': 2
+        }
+      });
+      map.addLayer({
+        id: 'existing-stations-label',
+        type: 'symbol',
+        source: 'existing-stations',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': ['case', ['get', 'hub'], 12, 10],
+          'text-offset': [0, -1.2],
+          'text-anchor': 'bottom'
+        },
+        paint: {
+          'text-color': '#1e293b',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2
+        }
+      });
+    }
+
+    // 3. 駅勢圏インパクトサークル（Subway Builder風の赤い/青い駅エリア）
+    if (!map.getSource('station-zones')) {
+      map.addSource('station-zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'station-zones-fill',
+        type: 'circle',
+        source: 'station-zones',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 12, 14, 38],
+          'circle-color': ['get', 'color'],
+          'circle-opacity': 0.22,
+          'circle-stroke-color': ['get', 'color'],
+          'circle-stroke-width': 1.2,
+          'circle-stroke-opacity': 0.55
+        }
+      });
+    }
+
+    // 4. 自社開発による3D新規ビル群＆大型ランドマーク（fill-extrusion）
+    if (!map.getSource('dev-buildings')) {
+      map.addSource('dev-buildings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'dev-buildings-3d',
+        type: 'fill-extrusion',
+        source: 'dev-buildings',
+        paint: {
+          'fill-extrusion-color': ['get', 'color'],
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.92
+        }
+      });
+    }
+
+    // 5. 自社路線（Subway Builder風の太いベース＋鮮やかな速度/路線カラー）
+    if (!map.getSource('my-track')) {
+      map.addSource('my-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'my-track-casing',
+        type: 'line',
+        source: 'my-track',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#0f172a',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 10]
+        }
+      });
+      map.addLayer({
+        id: 'my-track-inner',
+        type: 'line',
+        source: 'my-track',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 6.2]
+        }
+      });
+    }
+
+    // 6. 走行中の自社列車（リアルタイムアニメーション）
+    if (!map.getSource('my-trains')) {
+      map.addSource('my-trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'my-trains-circle',
+        type: 'circle',
+        source: 'my-trains',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4.5, 14, 7.5],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2
+        }
+      });
+    }
+  }
+
+  function buildExistingLinesGeoJSON() {
+    return {
+      type: 'FeatureCollection',
+      features: EXISTING_LINES.map(line => ({
+        type: 'Feature',
+        properties: { name: line.name, color: line.color },
+        geometry: {
+          type: 'LineString',
+          coordinates: line.stations.map(id => {
+            const ex = EXISTING_STATIONS.find(e => e.id === id);
+            return ex ? [ex.lng, ex.lat] : null;
+          }).filter(Boolean)
+        }
+      }))
+    };
+  }
+
+  function buildExistingStationsGeoJSON() {
+    return {
+      type: 'FeatureCollection',
+      features: EXISTING_STATIONS.map(ex => ({
+        type: 'Feature',
+        properties: { id: ex.id, name: ex.name, hub: ex.hub },
+        geometry: { type: 'Point', coordinates: [ex.lng, ex.lat] }
+      }))
+    };
+  }
+
+  function syncMapGeoJSON() {
+    if (!mapReady || !map) return;
+
+    // 駅勢圏サークル
+    const zoneFeatures = state.myStations.map(st => {
+      const zColor = st.congestion > 130 ? '#ef4444' : (ZONINGS[st.zoning] ? ZONINGS[st.zoning].color : '#0ea5e9');
+      return {
+        type: 'Feature',
+        properties: { id: st.id, color: zColor },
+        geometry: { type: 'Point', coordinates: [st.lng, st.lat] }
+      };
+    });
+    if (map.getSource('station-zones')) {
+      map.getSource('station-zones').setData({ type: 'FeatureCollection', features: zoneFeatures });
+    }
+
+    // 自社路線（区間ごとに速度・混雑ヒートカラー or シアン）
+    const trackFeatures = [];
+    const maxSpeed = Math.max(...state.services.filter(s => s.enabled).map(s => s.speed), 42);
+    const hasPassing = hasIntermediatePassingTrack();
+
+    for (let i = 0; i < state.myStations.length - 1; i++) {
+      const a = state.myStations[i];
+      const b = state.myStations[i + 1];
+      let segColor = '#0ea5e9';
+      if (state.showSpeedHeat) {
+        const effSpeed = maxSpeed > 45 && !hasPassing ? 42 + (maxSpeed - 42) * 0.35 : maxSpeed;
+        const avgCong = (a.congestion + b.congestion) * 0.5;
+        if (avgCong > 140) segColor = '#ef4444';
+        else if (effSpeed >= 70) segColor = '#22c55e';
+        else if (effSpeed >= 54) segColor = '#84cc16';
+        else segColor = '#f59e0b';
+      }
+      trackFeatures.push({
+        type: 'Feature',
+        properties: { color: segColor },
+        geometry: { type: 'LineString', coordinates: [[a.lng, a.lat], [b.lng, b.lat]] }
+      });
+    }
+    if (map.getSource('my-track')) {
+      map.getSource('my-track').setData({ type: 'FeatureCollection', features: trackFeatures });
+    }
+
+    // 沿線開発3Dビル群＆大型ランドマーク（fill-extrusion）
+    const bldgFeatures = [];
+    state.myStations.forEach(st => {
+      const z = ZONINGS[st.zoning] || ZONINGS.residential;
+      const baseH = 22 + st.devLevel * 1.1 + (st.accessScore * 0.45);
+
+      // 駅前自動成長ビル（4ブロック）
+      const offsets = [
+        [110, 85, 42, 36, 1.0],
+        [-115, 75, 38, 38, 0.85],
+        [95, -95, 36, 40, 0.78],
+        [-105, -90, 40, 34, 0.72]
+      ];
+      offsets.forEach(([ox, oy, hw, hh, mult]) => {
+        bldgFeatures.push({
+          type: 'Feature',
+          properties: {
+            color: z.color,
+            height: Math.round(baseH * mult)
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: makeBuildingPolygon(st.lng, st.lat, hw, hh, ox, oy)
+          }
+        });
+      });
+
+      // 大型ランドマーク（存在する場合、ひときわ高い象徴的3Dタワー）
+      if (st.landmark) {
+        const lm = LANDMARKS.find(l => l.id === st.landmark);
+        if (lm) {
+          bldgFeatures.push({
+            type: 'Feature',
+            properties: {
+              color: lm.color,
+              height: Math.round(115 + st.devLevel * 0.9)
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: makeBuildingPolygon(st.lng, st.lat, 62, 62, 0, 145)
+            }
+          });
+        }
+      }
+    });
+    if (map.getSource('dev-buildings')) {
+      map.getSource('dev-buildings').setData({ type: 'FeatureCollection', features: bldgFeatures });
+    }
+  }
+
+  function syncStationMarkers() {
+    if (!map) return;
+    stationMarkers.forEach(m => m.remove());
+    stationMarkers = [];
+
+    state.myStations.forEach(st => {
+      const el = document.createElement('div');
+      const isSelected = state.selectedStationId === st.id;
+      const isDirect = st.existingId && state.directAgreements[st.existingId];
+      const lm = st.landmark ? LANDMARKS.find(l => l.id === st.landmark) : null;
+      el.className = `station-pill-marker ${isSelected ? 'selected' : ''} ${isDirect ? 'direct' : ''}`;
+      el.innerHTML = `<span>${st.name}${isDirect ? '★' : ''}${st.hasPassing ? ' [4]' : ''}</span>${lm ? `<span>${lm.icon}</span>` : ''}`;
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        state.selectedStationId = st.id;
+        state.selectedPoint = { lat: st.lat, lng: st.lng, muni: getNearestMunicipality(st.lat, st.lng) };
+        playSfx('tap');
+        updateHUD();
+        renderPanel();
+        syncStationMarkers();
+      });
+
+      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -6] })
+        .setLngLat([st.lng, st.lat])
+        .addTo(map);
+      stationMarkers.push(marker);
+    });
+  }
+
+  function updateTrainGeoJSON() {
+    if (!mapReady || !map || !map.getSource('my-trains') || state.myStations.length < 2) return;
+    const features = state.trains.map(tr => {
+      const segIdx = Math.min(state.myStations.length - 2, Math.max(0, Math.floor(tr.progress)));
+      const frac = tr.progress - segIdx;
+      const a = state.myStations[segIdx];
+      const b = state.myStations[segIdx + 1];
+      const lng = a.lng + (b.lng - a.lng) * frac;
+      const lat = a.lat + (b.lat - a.lat) * frac;
+      return {
+        type: 'Feature',
+        properties: { color: tr.color },
+        geometry: { type: 'Point', coordinates: [lng, lat] }
+      };
+    });
+    map.getSource('my-trains').setData({ type: 'FeatureCollection', features });
+  }
+
+  // =========================================================================
+  // 7. UI レンダリング（HUD & 下部4タブパネル）
+  // =========================================================================
+  function showToast(msg) {
+    const box = document.getElementById('toast-box');
+    const el = document.createElement('div');
+    el.className = 'toast-item';
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(() => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 2400);
+  }
+
+  function updateHUD() {
+    document.getElementById('hud-date').textContent = `${state.year}年${state.month}月`;
+    const fundsEl = document.getElementById('hud-funds');
+    fundsEl.textContent = `${state.funds.toFixed(1)}億円`;
+    fundsEl.className = `text-sm font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+    const pop = getCorridorPop();
+    const diff = pop - state.initialCorridorPop;
+    const diffStr = diff >= 0 ? `+${(diff / 10000).toFixed(2)}` : `${(diff / 10000).toFixed(2)}`;
+    document.getElementById('hud-pop').textContent = `沿線 ${(pop / 10000).toFixed(1)}万人 (${diffStr})`;
+
+    const banner = document.getElementById('mode-banner');
+    if (state.buildMode === 'extend') banner.classList.remove('hidden');
+    else banner.classList.add('hidden');
+
+    updateMapChip();
+  }
+
+  function updateMapChip() {
+    const titleEl = document.getElementById('chip-title');
+    const subEl = document.getElementById('chip-sub');
+    const st = state.myStations.find(s => s.id === state.selectedStationId);
+    if (st && state.selectedPoint && haversineKm(st.lat, st.lng, state.selectedPoint.lat, state.selectedPoint.lng) < 0.3) {
+      const directTag = st.existingId && state.directAgreements[st.existingId] ? ' [直通中]' : '';
+      titleEl.textContent = `🚉 ${st.name}駅${directTag} (${st.muniName})`;
+      subEl.textContent = `都心体感 ${st.hubTime}分 / 乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 / 混雑 ${st.congestion}%`;
+      return;
+    }
+    if (state.selectedPoint) {
+      const m = state.selectedPoint.muni;
+      const nearEx = getNearestExistingStation(state.selectedPoint.lat, state.selectedPoint.lng, 0.9);
+      titleEl.textContent = `${m.name}${nearEx ? `・${nearEx.name}駅付近` : ''}`;
+      subEl.textContent = `自治体人口 ${m.pop.toLocaleString()}人 / 密度 ${Math.round(m.pop / m.area).toLocaleString()}人/km²`;
+    }
+  }
+
+  function renderPanel() {
+    const container = document.getElementById('panel-content');
+    if (state.activeTab === 'route') renderRouteTab(container);
+    else if (state.activeTab === 'service') renderServiceTab(container);
+    else if (state.activeTab === 'dev') renderDevTab(container);
+    else if (state.activeTab === 'finance') renderFinanceTab(container);
+  }
+
+  // --- タブ1: 路線・駅 ---
+  function renderRouteTab(container) {
+    const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0];
+    const passingOk = hasIntermediatePassingTrack();
+    const canDirectStations = state.myStations.filter(s => s.existingId);
+
+    let directHtml = '';
+    if (canDirectStations.length > 0) {
+      directHtml = `<div class="mt-2.5">
+        <div class="text-[11px] font-bold text-amber-300 mb-1">既存路線との直通運転協定</div>
+        <div class="space-y-1.5">
+          ${canDirectStations.map(cs => {
+            const ex = EXISTING_STATIONS.find(e => e.id === cs.existingId);
+            const active = !!state.directAgreements[ex.id];
+            return `
+              <div class="flex items-center justify-between bg-slate-800/80 border ${active ? 'border-amber-400/70' : 'border-slate-700'} rounded-lg px-2.5 py-1.5">
+                <div class="min-w-0">
+                  <div class="text-xs font-bold text-white">${cs.name} ⇔ ${ex.lines[0]}</div>
+                  <div class="text-[10px] text-slate-400">${active ? `直通中 (線路使用料 ${ex.directFee}億/月・乗換0分)` : `協定費 ${ex.directCost}億 / 乗換ペナルティ-10分`}</div>
+                </div>
+                ${active
+                  ? `<span class="text-[10px] font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">締結済</span>`
+                  : `<button data-action="sign-direct" data-exid="${ex.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 shrink-0">協定締結</button>`
+                }
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+
+    container.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <div>
+          <div class="text-xs font-extrabold text-white">多摩川新線（全${state.myStations.length}駅・${getLineLengthKm().toFixed(1)}km）</div>
+          <div class="text-[10px] text-slate-400">待避線: ${passingOk ? '<span class="text-emerald-400">追い越し可能</span>' : '<span class="text-amber-300">中間駅に未設置（急行減速）</span>'}</div>
+        </div>
+        <button data-action="toggle-extend" class="px-3 py-1.5 rounded-lg text-xs font-bold ${state.buildMode === 'extend' ? 'bg-rose-600 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'} shadow">
+          ${state.buildMode === 'extend' ? '延伸を終了' : '＋ 新駅を延伸'}
+        </button>
+      </div>
+
+      ${st ? `
+      <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <div class="text-xs font-bold text-sky-300">選択駅: ${st.name}駅</div>
+            <div class="text-[10px] text-slate-300 mt-0.5">都心体感 <strong class="text-white">${st.hubTime}分</strong> ・乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 ・混雑 ${st.congestion}%</div>
+          </div>
+          ${st.hasPassing
+            ? `<span class="text-[10px] font-bold px-2 py-1 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40">2面4線 済</span>`
+            : `<button data-action="upgrade-passing" data-stid="${st.id}" class="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white shrink-0">待避線拡張 (35億)</button>`
+          }
+        </div>
+      </div>` : ''}
+
+      ${directHtml}
+
+      <div class="mt-2.5">
+        <div class="text-[10px] font-bold text-slate-400 mb-1">自社駅一覧（タップでフォーカス）</div>
+        <div class="flex flex-wrap gap-1.5">
+          ${state.myStations.map(s => `
+            <button data-action="select-station" data-stid="${s.id}" class="px-2.5 py-1 rounded-full text-[11px] font-semibold border ${s.id === state.selectedStationId ? 'bg-sky-600 text-white border-sky-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">
+              ${s.name}${s.hasPassing ? ' [4線]' : ''}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // --- タブ2: 種別・直通 ---
+  function renderServiceTab(container) {
+    const hasPassing = hasIntermediatePassingTrack();
+    const hasDirect = getConnectedDirectStations().length > 0;
+
+    container.innerHTML = `
+      <div class="flex items-center justify-between mb-1.5">
+        <div class="text-xs font-extrabold text-white">種別・停車駅エディタ（1時間あたり）</div>
+        <span class="text-[10px] ${hasPassing ? 'text-emerald-400' : 'text-amber-300'}">${hasPassing ? '待避線OK' : '⚠ 待避線なし'}</span>
+      </div>
+
+      <div class="grid grid-cols-4 gap-1.5 mb-2">
+        ${state.services.map(sv => `
+          <div class="bg-slate-800/90 border ${sv.enabled ? 'border-slate-500' : 'border-slate-800 opacity-60'} rounded-lg p-1.5 flex flex-col items-center gap-1">
+            <button data-action="toggle-service" data-svid="${sv.id}" class="w-full py-0.5 rounded text-[11px] font-extrabold" style="background:${sv.enabled ? sv.color : '#334155'};color:${sv.enabled ? '#0f172a' : '#94a3b8'}">
+              ${sv.name} ${sv.enabled ? 'ON' : 'OFF'}
+            </button>
+            <div class="flex items-center gap-1 text-[10px] text-slate-200">
+              <button data-action="freq-down" data-svid="${sv.id}" class="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 font-bold">-</button>
+              <span class="w-7 text-center font-bold tabular-nums">${sv.freq}本</span>
+              <button data-action="freq-up" data-svid="${sv.id}" class="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 font-bold">+</button>
+            </div>
+            <button data-action="toggle-sv-direct" data-svid="${sv.id}" class="w-full py-0.5 rounded text-[9px] font-bold border ${sv.direct && hasDirect ? 'bg-amber-500/20 text-amber-300 border-amber-400/60' : 'bg-slate-900 text-slate-400 border-slate-700'}">
+              ${sv.direct && hasDirect ? '直通ON' : '直通OFF'}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="bg-slate-950/70 border border-slate-800 rounded-xl overflow-hidden">
+        <table class="w-full text-[11px] border-collapse">
+          <thead>
+            <tr class="bg-slate-900 text-slate-400 border-b border-slate-800">
+              <th class="text-left py-1.5 px-2 font-semibold">駅名</th>
+              ${state.services.map(sv => `<th class="py-1.5 px-1 text-center font-bold" style="color:${sv.color}">${sv.name}</th>`).join('')}
+              <th class="py-1.5 px-2 text-right font-semibold">都心</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.myStations.map((st, idx) => `
+              <tr class="border-b border-slate-800/70 last:border-0">
+                <td class="py-1.5 px-2 font-bold text-slate-200 truncate max-w-[92px]">
+                  ${st.name}${st.hasPassing ? '<span class="text-[9px] text-sky-400 ml-0.5">4</span>' : ''}
+                </td>
+                ${state.services.map(sv => {
+                  const stop = !!sv.stops[st.id];
+                  const locked = sv.id === 'local' || idx === 0 || idx === state.myStations.length - 1;
+                  return `
+                    <td class="py-1 text-center">
+                      <button data-action="toggle-stop" data-svid="${sv.id}" data-stid="${st.id}" class="w-6 h-6 rounded-full text-xs font-extrabold ${stop ? 'text-slate-950' : 'bg-slate-800 text-slate-500'} ${locked ? 'opacity-80' : ''}" style="${stop ? `background:${sv.color}` : ''}">
+                        ${stop ? '●' : '｜'}
+                      </button>
+                    </td>`;
+                }).join('')}
+                <td class="py-1.5 px-2 text-right font-bold tabular-nums ${st.hubTime <= 35 ? 'text-emerald-400' : (st.hubTime <= 50 ? 'text-amber-300' : 'text-rose-400')}">
+                  ${st.hubTime}分
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // --- タブ3: 沿線開発 ---
+  function renderDevTab(container) {
+    const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0];
+    if (!st) return;
+    const currentLm = st.landmark ? LANDMARKS.find(l => l.id === st.landmark) : null;
+
+    container.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <div class="text-xs font-extrabold text-white">沿線開発: <span class="text-sky-300">${st.name}駅</span></div>
+        <div class="flex gap-1 overflow-x-auto max-w-[55%]">
+          ${state.myStations.map(s => `
+            <button data-action="select-station" data-stid="${s.id}" class="px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${s.id === st.id ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400'}">${s.name}</button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="mb-2.5">
+        <div class="text-[10px] font-bold text-slate-400 mb-1">一般市街地の開発方針（3D自動成長）</div>
+        <div class="grid grid-cols-4 gap-1.5">
+          ${Object.values(ZONINGS).map(z => {
+            const active = st.zoning === z.id;
+            return `
+              <button data-action="set-zoning" data-stid="${st.id}" data-zoning="${z.id}" class="py-1.5 px-1 rounded-lg text-[10px] font-bold border ${active ? 'bg-slate-800 text-white' : 'bg-slate-900 text-slate-400 border-slate-800'}" style="${active ? `border-color:${z.color};box-shadow:inset 0 0 0 1px ${z.color}` : ''}">
+                ${z.name}
+              </button>`;
+          }).join('')}
+        </div>
+        <div class="text-[10px] text-slate-400 mt-1">${ZONINGS[st.zoning].desc}</div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <div class="text-[10px] font-bold text-slate-400">大型ランドマーク（直接建設・1駅1施設）</div>
+          ${currentLm ? `<span class="text-[10px] font-bold text-emerald-400">建設済: ${currentLm.icon}${currentLm.name}</span>` : ''}
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          ${LANDMARKS.map(lm => {
+            const builtHere = st.landmark === lm.id;
+            return `
+              <button data-action="build-landmark" data-stid="${st.id}" data-lmid="${lm.id}" class="text-left p-2 rounded-xl border ${builtHere ? 'bg-emerald-950/60 border-emerald-500/70' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700'} transition">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-white">${lm.icon} ${lm.name}</span>
+                  <span class="text-[10px] font-extrabold text-amber-300">${lm.cost}億</span>
+                </div>
+                <div class="text-[9.5px] text-slate-400 mt-0.5 leading-snug">${lm.desc}</div>
+              </button>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // --- タブ4: 経営・統計 ---
+  function renderFinanceTab(container) {
+    const f = state.finance;
+    const totalRev = f.fareRev + f.expressRev + f.estateRev;
+    const totalExp = f.trackCost + f.opCost + f.directCost + f.landmarkCost;
+
+    container.innerHTML = `
+      <div class="grid grid-cols-3 gap-1.5 mb-2">
+        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2">
+          <div class="text-[10px] text-slate-400">月間収入</div>
+          <div class="text-xs font-extrabold text-sky-300 tabular-nums mt-0.5">+${totalRev.toFixed(1)}億</div>
+        </div>
+        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2">
+          <div class="text-[10px] text-slate-400">月間支出</div>
+          <div class="text-xs font-extrabold text-rose-300 tabular-nums mt-0.5">-${totalExp.toFixed(1)}億</div>
+        </div>
+        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2">
+          <div class="text-[10px] text-slate-400">月間純利益</div>
+          <div class="text-xs font-extrabold tabular-nums mt-0.5 ${f.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${f.netProfit >= 0 ? '+' : ''}${f.netProfit.toFixed(1)}億</div>
+        </div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 mb-2 text-[10px] grid grid-cols-2 gap-x-3 gap-y-1">
+        <div class="flex justify-between"><span class="text-slate-400">運賃収入</span><span class="font-bold text-slate-200">${f.fareRev.toFixed(1)}億</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">路線・駅維持</span><span class="font-bold text-slate-200">${f.trackCost.toFixed(1)}億</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">特急料金</span><span class="font-bold text-slate-200">${f.expressRev.toFixed(1)}億</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">列車運行費</span><span class="font-bold text-slate-200">${f.opCost.toFixed(1)}億</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">沿線不動産</span><span class="font-bold text-slate-200">${f.estateRev.toFixed(1)}億</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">直通・施設費</span><span class="font-bold text-slate-200">${(f.directCost + f.landmarkCost).toFixed(1)}億</span></div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 mb-2">
+        <div class="text-[10px] font-bold text-slate-400 mb-1">沿線人口の推移（万人）</div>
+        <div class="relative h-20 w-full">
+          <canvas id="pop-chart-canvas" class="w-full h-full"></canvas>
+        </div>
+      </div>
+
+      <div class="text-[10px] font-bold text-slate-400 mb-1">駅別パフォーマンス</div>
+      <div class="space-y-1">
+        ${state.myStations.map(st => `
+          <div class="flex items-center justify-between bg-slate-800/60 rounded-lg px-2 py-1 text-[10.5px]">
+            <span class="font-bold text-white">${st.name}</span>
+            <div class="flex items-center gap-2.5 tabular-nums">
+              <span class="text-slate-300">${(st.ridership / 1000).toFixed(1)}千人/日</span>
+              <span class="${st.hubTime <= 35 ? 'text-emerald-400' : 'text-amber-300'} font-bold">都心${st.hubTime}分</span>
+              <span class="${st.congestion > 130 ? 'text-rose-400 font-bold' : 'text-slate-400'}">混雑${st.congestion}%</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    drawPopChart();
+  }
+
+  function drawPopChart() {
+    const c = document.getElementById('pop-chart-canvas');
+    if (!c) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const rect = c.getBoundingClientRect();
+    const w = Math.max(120, Math.floor(rect.width));
+    const h = Math.max(50, Math.floor(rect.height));
+    c.width = w * dpr;
+    c.height = h * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const data = state.history.corridorPop;
+    if (data.length < 2) {
+      g.fillStyle = '#94a3b8';
+      g.font = '10px sans-serif';
+      g.fillText('月が進むと人口推移が表示されます', 8, h * 0.55);
+      return;
+    }
+
+    const minV = Math.min(...data) * 0.99;
+    const maxV = Math.max(...data) * 1.01 + 100;
+    const padX = 8, padY = 8;
+
+    g.beginPath();
+    data.forEach((v, i) => {
+      const px = padX + (i / (data.length - 1)) * (w - padX * 2);
+      const py = h - padY - ((v - minV) / (maxV - minV)) * (h - padY * 2);
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    });
+    g.strokeStyle = '#38bdf8';
+    g.lineWidth = 2;
+    g.stroke();
+
+    const lastV = data[data.length - 1];
+    g.fillStyle = '#e2e8f0';
+    g.font = 'bold 10px sans-serif';
+    g.fillText(`${(lastV / 10000).toFixed(2)}万人`, w - 58, 12);
+  }
+
+  // =========================================================================
+  // 8. プレイヤー操作ハンドラ
+  // =========================================================================
+  function tryExtendToLatLng(lat, lng) {
+    // 既存駅に近ければスナップして直通接続可能にする
+    const nearEx = getNearestExistingStation(lat, lng, 0.95);
+    const targetLat = nearEx ? nearEx.lat : lat;
+    const targetLng = nearEx ? nearEx.lng : lng;
+
+    if (state.myStations.some(s => haversineKm(s.lat, s.lng, targetLat, targetLng) < 0.7)) {
+      showToast('既存の自社駅に近すぎます（もう少し離れた地点を選択）');
+      playSfx('error');
+      return;
+    }
+
+    const first = state.myStations[0];
+    const last = state.myStations[state.myStations.length - 1];
+    const dFirst = haversineKm(first.lat, first.lng, targetLat, targetLng);
+    const dLast = haversineKm(last.lat, last.lng, targetLat, targetLng);
+    const attachToStart = dFirst < dLast;
+    const distKm = Math.min(dFirst, dLast);
+
+    if (distKm > 12.0) {
+      showToast('終端駅から遠すぎます（12km以内を選択）');
+      playSfx('error');
+      return;
+    }
+
+    const muni = getNearestMunicipality(targetLat, targetLng);
+    const cost = Math.round(18 + distKm * 7.5 + muni.priceBase * 0.35);
+    if (state.funds < cost) {
+      showToast(`資金が不足しています（必要: ${cost}億円）`);
+      playSfx('error');
+      return;
+    }
+
+    state.funds = Math.round((state.funds - cost) * 10) / 10;
+    const newId = 'st_' + (state.myStations.length + 1);
+    let newName = nearEx
+      ? nearEx.name
+      : `${muni.name.replace(/[区市]/g, '')}${['北', '南', '東', '西', '中央', '台'][state.myStations.length % 6]}`;
+    if (state.myStations.some(s => s.name === newName)) {
+      newName = `${newName}新`;
+    }
+
+    const newStation = createStationState({
+      id: newId,
+      name: newName,
+      lat: targetLat,
+      lng: targetLng,
+      hasPassing: false,
+      existingId: nearEx ? nearEx.id : null
+    });
+
+    if (attachToStart) state.myStations.unshift(newStation);
+    else state.myStations.push(newStation);
+
+    state.services.forEach(sv => { sv.stops[newId] = true; });
+    state.selectedStationId = newId;
+    state.selectedPoint = { lat: targetLat, lng: targetLng, muni };
+
+    playSfx('build');
+    showToast(`🚉 ${newName}駅を開業！（建設費 ${cost}億円）`);
+    recalculateSimulation(false);
+    rebuildTrainActors();
+    syncMapGeoJSON();
+    syncStationMarkers();
+    updateHUD();
+    renderPanel();
+  }
+
+  document.getElementById('panel-content').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+
+    if (action === 'toggle-extend') {
+      state.buildMode = state.buildMode === 'extend' ? null : 'extend';
+      playSfx('tap');
+      if (state.buildMode === 'extend') showToast('実在マップ上の任意の地点をタップして延伸');
+      updateHUD();
+      renderPanel();
+    } else if (action === 'select-station') {
+      const st = state.myStations.find(s => s.id === btn.dataset.stid);
+      if (st) {
+        state.selectedStationId = st.id;
+        state.selectedPoint = { lat: st.lat, lng: st.lng, muni: getNearestMunicipality(st.lat, st.lng) };
+        if (map) map.easeTo({ center: [st.lng, st.lat], zoom: Math.max(map.getZoom(), 13.4), duration: 450 });
+        playSfx('tap');
+        updateHUD();
+        renderPanel();
+        syncStationMarkers();
+      }
+    } else if (action === 'upgrade-passing') {
+      const st = state.myStations.find(s => s.id === btn.dataset.stid);
+      if (!st || st.hasPassing) return;
+      if (state.funds < 35) {
+        showToast('資金不足です（必要: 35億円）');
+        playSfx('error');
+        return;
+      }
+      state.funds = Math.round((state.funds - 35) * 10) / 10;
+      st.hasPassing = true;
+      playSfx('build');
+      showToast(`${st.name}駅を2面4線（待避線付き）に拡張！`);
+      recalculateSimulation(false);
+      syncMapGeoJSON();
+      syncStationMarkers();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'sign-direct') {
+      const ex = EXISTING_STATIONS.find(x => x.id === btn.dataset.exid);
+      if (!ex || state.directAgreements[ex.id]) return;
+      if (state.funds < ex.directCost) {
+        showToast(`資金不足です（必要: ${ex.directCost}億円）`);
+        playSfx('error');
+        return;
+      }
+      state.funds = Math.round((state.funds - ex.directCost) * 10) / 10;
+      state.directAgreements[ex.id] = true;
+      state.services.forEach(sv => { if (sv.enabled) sv.direct = true; });
+      playSfx('direct');
+      showToast(`✨ ${ex.name}駅で${ex.lines[0]}との直通運転を開始！`);
+      recalculateSimulation(false);
+      syncMapGeoJSON();
+      syncStationMarkers();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'toggle-service') {
+      const sv = state.services.find(s => s.id === btn.dataset.svid);
+      if (!sv) return;
+      if (sv.id === 'local') {
+        showToast('各駅停車は常時運行が必要です');
+        playSfx('error');
+        return;
+      }
+      sv.enabled = !sv.enabled;
+      playSfx('tap');
+      recalculateSimulation(false);
+      rebuildTrainActors();
+      syncMapGeoJSON();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'freq-up' || action === 'freq-down') {
+      const sv = state.services.find(s => s.id === btn.dataset.svid);
+      if (!sv) return;
+      sv.freq = Math.max(1, Math.min(12, sv.freq + (action === 'freq-up' ? 1 : -1)));
+      playSfx('tap');
+      recalculateSimulation(false);
+      rebuildTrainActors();
+      syncMapGeoJSON();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'toggle-sv-direct') {
+      const sv = state.services.find(s => s.id === btn.dataset.svid);
+      if (!sv) return;
+      if (getConnectedDirectStations().length === 0) {
+        showToast('先に「路線・駅」タブで直通運転協定を結んでください');
+        playSfx('error');
+        return;
+      }
+      sv.direct = !sv.direct;
+      playSfx('tap');
+      recalculateSimulation(false);
+      syncMapGeoJSON();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'toggle-stop') {
+      const sv = state.services.find(s => s.id === btn.dataset.svid);
+      const stId = btn.dataset.stid;
+      const idx = state.myStations.findIndex(s => s.id === stId);
+      if (!sv || idx < 0) return;
+      if (sv.id === 'local' || idx === 0 || idx === state.myStations.length - 1) {
+        showToast('各停および両端の終点駅は停車固定です');
+        return;
+      }
+      sv.stops[stId] = !sv.stops[stId];
+      playSfx('tap');
+      recalculateSimulation(false);
+      syncMapGeoJSON();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'set-zoning') {
+      const st = state.myStations.find(s => s.id === btn.dataset.stid);
+      if (!st) return;
+      st.zoning = btn.dataset.zoning;
+      playSfx('tap');
+      showToast(`${st.name}駅周辺を「${ZONINGS[st.zoning].name}」に変更`);
+      recalculateSimulation(false);
+      syncMapGeoJSON();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'build-landmark') {
+      const st = state.myStations.find(s => s.id === btn.dataset.stid);
+      const lm = LANDMARKS.find(l => l.id === btn.dataset.lmid);
+      if (!st || !lm) return;
+      if (st.landmark === lm.id) {
+        showToast('この施設はすでに建設済みです');
+        return;
+      }
+      if (state.funds < lm.cost) {
+        showToast(`資金不足です（必要: ${lm.cost}億円）`);
+        playSfx('error');
+        return;
+      }
+      state.funds = Math.round((state.funds - lm.cost) * 10) / 10;
+      st.landmark = lm.id;
+      st.areaPop += lm.popAdd;
+      st.comm = Math.min(100, st.comm + lm.commAdd);
+      st.devLevel = Math.min(100, st.devLevel + 18);
+      if (map) map.easeTo({ center: [st.lng, st.lat], zoom: Math.max(map.getZoom(), 14.2), pitch: 58, duration: 500 });
+      playSfx('build');
+      showToast(`${lm.icon} ${st.name}駅前に「${lm.name}」が開業！`);
+      recalculateSimulation(false);
+      syncMapGeoJSON();
+      syncStationMarkers();
+      updateHUD();
+      renderPanel();
+    }
+  });
+
+  // タブ切り替え
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.activeTab = btn.dataset.tab;
+      if (state.activeTab !== 'route') state.buildMode = null;
+      playSfx('tap');
+      updateHUD();
+      renderPanel();
+    });
+  });
+
+  // 速度・ミュート・ヘルプ
+  [0, 1, 3].forEach(sp => {
+    document.getElementById(`btn-speed-${sp}`).addEventListener('click', () => {
+      state.speed = sp;
+      document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`btn-speed-${sp}`).classList.add('active');
+      playSfx('tap');
+    });
+  });
+
+  document.getElementById('btn-mute').addEventListener('click', (e) => {
+    isMuted = !isMuted;
+    e.currentTarget.textContent = isMuted ? '🔇' : '🔊';
+  });
+
+  const helpModal = document.getElementById('help-modal');
+  document.getElementById('btn-help').addEventListener('click', () => { helpModal.classList.remove('hidden'); playSfx('tap'); });
+  document.getElementById('btn-close-help').addEventListener('click', () => { helpModal.classList.add('hidden'); });
+  document.getElementById('btn-start-play').addEventListener('click', () => { helpModal.classList.add('hidden'); playSfx('tap'); });
+  document.getElementById('btn-cancel-mode').addEventListener('click', () => {
+    state.buildMode = null;
+    updateHUD();
+    renderPanel();
+  });
+
+  // マップ操作ボタン
+  document.getElementById('btn-zoom-in').addEventListener('click', () => {
+    if (map) map.zoomIn({ duration: 250 });
+    playSfx('tap');
+  });
+  document.getElementById('btn-zoom-out').addEventListener('click', () => {
+    if (map) map.zoomOut({ duration: 250 });
+    playSfx('tap');
+  });
+  document.getElementById('btn-view-toggle').addEventListener('click', (e) => {
+    state.is25D = !state.is25D;
+    e.currentTarget.textContent = state.is25D ? '2.5D' : '2D';
+    if (map) map.easeTo({ pitch: state.is25D ? 55 : 0, bearing: state.is25D ? -16 : 0, duration: 400 });
+    playSfx('tap');
+  });
+  document.getElementById('btn-layer-speed').addEventListener('click', (e) => {
+    state.showSpeedHeat = !state.showSpeedHeat;
+    e.currentTarget.textContent = state.showSpeedHeat ? '速度' : '路線';
+    e.currentTarget.className = `w-8 h-8 rounded-lg bg-white/95 font-extrabold text-[9px] border border-slate-300 shadow active:scale-95 ${state.showSpeedHeat ? 'text-emerald-700' : 'text-sky-700'}`;
+    syncMapGeoJSON();
+    playSfx('tap');
+  });
+  document.getElementById('btn-center').addEventListener('click', () => {
+    if (map) map.easeTo({ center: [139.535, 35.626], zoom: 12.1, pitch: state.is25D ? 55 : 0, bearing: state.is25D ? -16 : 0, duration: 450 });
+    playSfx('tap');
+  });
+
+  // =========================================================================
+  // 9. メインループ
+  // =========================================================================
+  let lastFrameTime = 0;
+  let rafId = null;
+
+  function gameLoop(ts) {
+    if (!lastFrameTime) lastFrameTime = ts;
+    const dt = Math.min(0.1, (ts - lastFrameTime) / 1000);
+    lastFrameTime = ts;
+
+    if (state.speed > 0) {
+      const maxSeg = Math.max(1, state.myStations.length - 1);
+      state.trains.forEach(tr => {
+        const step = (tr.speed / 135) * dt * state.speed;
+        tr.progress += step * tr.dir;
+        if (tr.progress >= maxSeg) { tr.progress = maxSeg; tr.dir = -1; }
+        else if (tr.progress <= 0) { tr.progress = 0; tr.dir = 1; }
+      });
+      updateTrainGeoJSON();
+
+      state.tickInMonth += dt * state.speed;
+      if (state.tickInMonth >= 4.5) {
+        state.tickInMonth = 0;
+        state.month += 1;
+        if (state.month > 12) { state.month = 1; state.year += 1; }
+        recalculateSimulation(true);
+        recordHistory();
+        syncMapGeoJSON();
+        playSfx('month');
+        updateHUD();
+        if (state.activeTab === 'finance') renderPanel();
+      }
+    }
+
+    rafId = requestAnimationFrame(gameLoop);
+  }
+
+  window.addEventListener('resize', () => {
+    if (map) map.resize();
+    if (state.activeTab === 'finance') drawPopChart();
+  });
+
+  window.addEventListener('load', () => {
+    initWorld();
+    initMap();
+    updateHUD();
+    renderPanel();
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(gameLoop);
+  });
+})();
+</script>
+</body>
+</html>
