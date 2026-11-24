@@ -22,7 +22,6 @@
     }
     #app-shell {
       width: 100%;
-      max-width: 460px;
       height: 100dvh;
       max-height: 100vh;
       margin: 0 auto;
@@ -30,26 +29,19 @@
       flex-direction: column;
       background: #0f172a;
       position: relative;
-      box-shadow: 0 0 40px rgba(0,0,0,0.65);
     }
-    @media (min-width: 520px) {
-      body {
-        background: radial-gradient(circle at 50% 20%, #1e293b 0%, #090d16 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      #app-shell {
-        height: min(96vh, 880px);
-        border-radius: 24px;
-        overflow: hidden;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-      }
+    #workspace {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
     }
     #map-wrapper {
       position: relative;
       flex: 1 1 auto;
-      min-height: 260px;
+      min-height: 240px;
       background: #eef2f6;
       overflow: hidden;
     }
@@ -72,6 +64,45 @@
       display: flex;
       flex-direction: column;
       z-index: 20;
+      flex-shrink: 0;
+    }
+    #panel-nav {
+      border-top: 1px solid #1e293b;
+    }
+    @media (min-width: 900px) {
+      #workspace {
+        flex-direction: row;
+      }
+      #map-wrapper {
+        min-height: 0;
+        height: 100%;
+      }
+      #panel-area {
+        width: 390px;
+        height: 100%;
+        min-height: 0;
+        max-height: none;
+        border-top: none;
+        border-left: 1px solid rgba(148, 163, 184, 0.2);
+        flex-shrink: 0;
+      }
+      #panel-nav {
+        order: -1;
+        border-top: none;
+        border-bottom: 1px solid #1e293b;
+      }
+      .tab-btn.active {
+        border-top: none !important;
+        border-bottom: 2px solid #38bdf8;
+      }
+      #map-info-chip {
+        max-width: 420px;
+      }
+    }
+    @media (min-width: 1280px) {
+      #panel-area {
+        width: 430px;
+      }
     }
     .panel-scroll {
       flex: 1 1 auto;
@@ -150,28 +181,35 @@
 <body>
   <div id="app-shell">
     <!-- 上部ステータスHUD -->
-    <header class="bg-slate-900/95 border-b border-slate-700/60 px-3 py-2 flex items-center justify-between gap-2 shrink-0 z-30">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <div>
+    <header class="bg-slate-900/95 border-b border-slate-700/60 px-3 md:px-4 py-2 flex items-center justify-between gap-2 md:gap-4 shrink-0 z-30">
+      <div class="flex items-center gap-2.5 md:gap-4 min-w-0">
+        <div class="hidden md:flex items-center gap-2 pr-3 border-r border-slate-700/80 shrink-0">
+          <span class="text-base">🚃</span>
+          <span class="text-sm font-extrabold tracking-tight text-white">沿線デベロッパー</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">TOKYO WEST</span>
+        </div>
+        <div class="flex flex-col md:flex-row md:items-center md:gap-4 min-w-0">
           <div class="flex items-center gap-1.5">
-            <span id="hud-date" class="text-xs font-bold text-sky-300 tracking-wide">2026年4月</span>
+            <span id="hud-date" class="text-xs md:text-sm font-bold text-sky-300 tracking-wide">2026年4月</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">東京西南部・実在2.5D</span>
           </div>
-          <div class="flex items-baseline gap-2 mt-0.5">
-            <span id="hud-funds" class="text-sm font-extrabold text-emerald-400 tabular-nums">450.0億円</span>
-            <span id="hud-pop" class="text-[11px] font-semibold text-slate-200 tabular-nums">沿線 21.4万人</span>
+          <div class="flex items-baseline gap-2 md:gap-4 mt-0.5 md:mt-0">
+            <span id="hud-funds" class="text-sm md:text-base font-extrabold text-emerald-400 tabular-nums">450.0億円</span>
+            <span id="hud-pop" class="text-[11px] md:text-xs font-semibold text-slate-200 tabular-nums">沿線 21.4万人</span>
           </div>
         </div>
       </div>
-      <div class="flex items-center gap-1 shrink-0">
-        <button id="btn-speed-0" class="speed-btn px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700" title="一時停止">Ⅱ</button>
-        <button id="btn-speed-1" class="speed-btn active px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700" title="通常速度">1x</button>
-        <button id="btn-speed-3" class="speed-btn px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700" title="3倍速">3x</button>
-        <button id="btn-mute" class="ml-0.5 px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 border border-slate-700" title="効果音切替">🔊</button>
-        <button id="btn-help" class="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 text-sky-300 border border-slate-700" title="遊び方">?</button>
+      <div class="flex items-center gap-1 md:gap-1.5 shrink-0">
+        <button id="btn-speed-0" class="speed-btn px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="一時停止 (Space)">Ⅱ</button>
+        <button id="btn-speed-1" class="speed-btn active px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="通常速度 (1)">1x</button>
+        <button id="btn-speed-3" class="speed-btn px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="3倍速 (3)">3x</button>
+        <button id="btn-mute" class="ml-0.5 px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="効果音切替">🔊</button>
+        <button id="btn-help" class="px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 cursor-pointer" title="遊び方">?</button>
       </div>
     </header>
 
+    <!-- メインワークスペース（モバイル: 縦積み / PC: 左マップ＋右サイドバー） -->
+    <div id="workspace">
     <!-- 実在2.5Dマップ領域（MapLibre GL JS） -->
     <main id="map-wrapper">
       <div id="map"></div>
@@ -210,8 +248,8 @@
     <section id="panel-area">
       <div id="panel-content" class="panel-scroll px-3 py-2.5"></div>
 
-      <!-- 下部4タブナビゲーション -->
-      <nav class="grid grid-cols-4 bg-slate-950 border-t border-slate-800 shrink-0">
+      <!-- 4タブナビゲーション（モバイル: 下部 / PC: サイドバー上部） -->
+      <nav id="panel-nav" class="grid grid-cols-4 bg-slate-950 shrink-0">
         <button data-tab="route" class="tab-btn active py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
           <span class="text-sm leading-none">🚉</span>
           <span class="text-[10px] font-bold">路線・駅</span>
@@ -230,10 +268,11 @@
         </button>
       </nav>
     </section>
+    </div>
 
     <!-- 遊び方モーダル -->
     <div id="help-modal" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-4 shadow-2xl max-h-[85%] overflow-y-auto">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm md:max-w-md w-full p-4 md:p-5 shadow-2xl max-h-[85%] overflow-y-auto">
         <div class="flex items-center justify-between mb-2">
           <h2 class="text-sm font-extrabold text-sky-300">沿線デベロッパー TOKYO WEST</h2>
           <button id="btn-close-help" class="text-slate-400 hover:text-white text-base font-bold px-2">✕</button>
@@ -242,7 +281,7 @@
           実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、私鉄路線と沿線の街を育てる2.5Dシミュレーションです。
         </p>
         <ul class="text-xs text-slate-300 space-y-1.5 list-disc pl-4 mb-3">
-          <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。二本指または右ドラッグで回転・傾きも調整可能です。</li>
+          <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ホイール／ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。右ドラッグ（スマホは二本指）で回転・傾きも調整可能です。</li>
           <li><strong class="text-white">路線・直通</strong>: 「＋新駅を延伸」で地図上の好きな場所へ延伸。既存路線駅（二子玉川・調布・登戸・新百合ヶ丘・多摩センター・町田など）付近に繋ぐと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
           <li><strong class="text-white">種別・待避線</strong>: 急行や特急の停車駅をタップで設定。途中に<strong class="text-sky-300">2面4線（待避線）</strong>があると速達効果がフル発揮され、遠方の都心体感時間が大幅短縮します。</li>
           <li><strong class="text-white">沿線開発</strong>: 駅ごとの開発方針で周辺に3D開発ビルが自動成長し、大型ランドマークを直接建てて街の目玉を作れます。</li>
@@ -1215,7 +1254,7 @@
     document.getElementById('hud-date').textContent = `${state.year}年${state.month}月`;
     const fundsEl = document.getElementById('hud-funds');
     fundsEl.textContent = `${state.funds.toFixed(1)}億円`;
-    fundsEl.className = `text-sm font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    fundsEl.className = `text-sm md:text-base font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
 
     const pop = getCorridorPop();
     const diff = pop - state.initialCorridorPop;
@@ -1475,7 +1514,7 @@
 
       <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 mb-2">
         <div class="text-[10px] font-bold text-slate-400 mb-1">沿線人口の推移（万人）</div>
-        <div class="relative h-20 w-full">
+        <div class="relative h-20 md:h-32 w-full">
           <canvas id="pop-chart-canvas" class="w-full h-full"></canvas>
         </div>
       </div>
@@ -1866,6 +1905,37 @@
   window.addEventListener('resize', () => {
     if (map) map.resize();
     if (state.activeTab === 'finance') drawPopChart();
+  });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const mapWrapEl = document.getElementById('map-wrapper');
+    if (mapWrapEl) {
+      new ResizeObserver(() => {
+        if (map) map.resize();
+      }).observe(mapWrapEl);
+    }
+  }
+
+  // PC向けキーボードショートカット
+  window.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key === 'Escape') {
+      if (!helpModal.classList.contains('hidden')) {
+        helpModal.classList.add('hidden');
+      } else if (state.buildMode) {
+        state.buildMode = null;
+        updateHUD();
+        renderPanel();
+      }
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      const nextSp = state.speed === 0 ? 1 : 0;
+      document.getElementById(`btn-speed-${nextSp}`).click();
+    } else if (e.key === '1') {
+      document.getElementById('btn-speed-1').click();
+    } else if (e.key === '3') {
+      document.getElementById('btn-speed-3').click();
+    }
   });
 
   window.addEventListener('load', () => {
