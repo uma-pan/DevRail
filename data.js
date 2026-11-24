@@ -144,9 +144,9 @@ window.RAIL_DATA = (() => {
   ];
 
   const STRUCTURES = {
-    surface:     { id: 'surface',     name: '地上', icon: '🛤️', costMult: 1.0,  upkeepMult: 1.0,  desc: '最安。幹線道路交差で踏切発生・建物密集地は用地費増' },
-    elevated:    { id: 'elevated',    name: '高架', icon: '🌉', costMult: 1.48, upkeepMult: 1.25, desc: '連続立体交差で踏切ゼロ。建物密集地は用地買収が必要' },
-    underground: { id: 'underground', name: '地下', icon: '🚇', costMult: 2.15, upkeepMult: 1.55, desc: '用地買収不要＆踏切ゼロ。既存道路下を通すとシールド割引-20%' }
+    surface:     { id: 'surface',     name: '地上', tag: '地上', costMult: 1.0,  upkeepMult: 1.0,  desc: '最安。幹線道路交差で踏切発生・建物密集地は用地費増' },
+    elevated:    { id: 'elevated',    name: '高架', tag: '高架', costMult: 1.48, upkeepMult: 1.25, desc: '連続立体交差で踏切ゼロ。建物密集地は用地買収が必要' },
+    underground: { id: 'underground', name: '地下', tag: '地下', costMult: 2.15, upkeepMult: 1.55, desc: '用地買収不要＆踏切ゼロ。既存道路下を通すとシールド割引-20%' }
   };
 
   const ZONINGS = {
@@ -157,12 +157,12 @@ window.RAIL_DATA = (() => {
   };
 
   const LANDMARKS = [
-    { id: 'dept', name: '駅直結商業ビル', icon: '🏬', cost: 45, upkeep: 1.2, popAdd: 300, commAdd: 22, revAdd: 3.8, weekendBoost: 1.15, color: '#0ea5e9', desc: '商業魅力度と月間不動産収益を大きく底上げ' },
-    { id: 'tower', name: 'タワーマンション群', icon: '🏙️', cost: 55, upkeep: 1.0, popAdd: 4800, commAdd: 8, revAdd: 3.2, weekendBoost: 1.0, color: '#f59e0b', desc: '駅勢圏の居住人口を即座に大幅増加' },
-    { id: 'univ', name: '私立大学キャンパス', icon: '🎓', cost: 65, upkeep: 1.5, popAdd: 1800, commAdd: 26, revAdd: 2.5, weekendBoost: 1.1, color: '#a855f7', desc: '郊外でも安定した通学・下り需要を創出' },
-    { id: 'park', name: '大型テーマパーク', icon: '🎡', cost: 90, upkeep: 2.4, popAdd: 500, commAdd: 38, revAdd: 5.5, weekendBoost: 1.55, color: '#f43f5e', desc: '休日の下り特急・急行需要を爆発的に増加' },
-    { id: 'outlet', name: 'アウトレットモール', icon: '🛍️', cost: 70, upkeep: 1.8, popAdd: 400, commAdd: 30, revAdd: 4.8, weekendBoost: 1.38, color: '#14b8a6', desc: '広域から買い物客を集め商業収益を拡大' },
-    { id: 'stadium', name: '多目的スタジアム', icon: '🏟️', cost: 85, upkeep: 2.0, popAdd: 600, commAdd: 34, revAdd: 4.6, weekendBoost: 1.45, color: '#f97316', desc: 'イベント時の爆発的な乗降客と話題性を獲得' }
+    { id: 'dept', name: '駅直結商業ビル', tag: '商業', cost: 45, upkeep: 1.2, popAdd: 300, commAdd: 22, revAdd: 3.8, weekendBoost: 1.15, color: '#0ea5e9', desc: '商業魅力度と月間不動産収益を大きく底上げ' },
+    { id: 'tower', name: 'タワーマンション群', tag: '住宅', cost: 55, upkeep: 1.0, popAdd: 4800, commAdd: 8, revAdd: 3.2, weekendBoost: 1.0, color: '#f59e0b', desc: '駅勢圏の居住人口を即座に大幅増加' },
+    { id: 'univ', name: '私立大学キャンパス', tag: '大学', cost: 65, upkeep: 1.5, popAdd: 1800, commAdd: 26, revAdd: 2.5, weekendBoost: 1.1, color: '#a855f7', desc: '郊外でも安定した通学・下り需要を創出' },
+    { id: 'park', name: '大型テーマパーク', tag: '観光', cost: 90, upkeep: 2.4, popAdd: 500, commAdd: 38, revAdd: 5.5, weekendBoost: 1.55, color: '#f43f5e', desc: '休日の下り特急・急行需要を爆発的に増加' },
+    { id: 'outlet', name: 'アウトレットモール', tag: '買物', cost: 70, upkeep: 1.8, popAdd: 400, commAdd: 30, revAdd: 4.8, weekendBoost: 1.38, color: '#14b8a6', desc: '広域から買い物客を集め商業収益を拡大' },
+    { id: 'stadium', name: '多目的スタジアム', tag: '集客', cost: 85, upkeep: 2.0, popAdd: 600, commAdd: 34, revAdd: 4.6, weekendBoost: 1.45, color: '#f97316', desc: 'イベント時の爆発的な乗降客と話題性を獲得' }
   ];
 
   return {
