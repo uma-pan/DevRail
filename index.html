@@ -173,7 +173,6 @@
       padding: 6px 12px;
       border-radius: 999px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.35);
-      backdrop-filter: blur(6px);
       animation: fadeSlide 0.2s ease-out;
     }
     @keyframes fadeSlide {
@@ -243,7 +242,7 @@
       <div id="toast-box"></div>
 
       <!-- モードバナー（線路敷設 / 駅設置モード中） -->
-      <div id="mode-banner" class="hidden absolute top-2.5 left-2.5 right-14 md:right-auto md:max-w-xl bg-slate-900/92 border border-sky-500/60 backdrop-blur text-white text-xs md:text-sm font-semibold px-3 md:px-3.5 py-2 rounded-xl shadow-lg flex flex-col gap-1.5 z-20">
+      <div id="mode-banner" class="hidden absolute top-2.5 left-2.5 right-14 md:right-auto md:max-w-xl bg-slate-900/95 border border-sky-500/70 text-white text-xs md:text-sm font-semibold px-3 md:px-3.5 py-2 rounded-xl shadow-lg flex flex-col gap-1.5 z-20">
         <div class="flex items-center justify-between gap-2">
           <span id="mode-banner-text" class="text-sky-200 font-bold">マップをクリックして線路を引こう</span>
           <div class="flex items-center gap-1.5 shrink-0">
@@ -271,13 +270,13 @@
       </div>
 
       <!-- 左下：選択地点のミニ情報チップ -->
-      <div id="map-info-chip" class="absolute bottom-2 left-2 bg-white/95 border border-slate-300/90 backdrop-blur px-2.5 py-1.5 rounded-xl text-[11px] max-w-[74%] shadow-md z-20 text-slate-800">
-        <div class="font-extrabold text-slate-900" id="chip-title">新規路線を敷設しよう</div>
-        <div class="text-slate-600 text-[10px] mt-0.5" id="chip-sub">マップをクリックして線路を引き、その上に駅を設置</div>
+      <div id="map-info-chip" class="absolute bottom-2 left-2 bg-white/95 border border-slate-300/90 px-2.5 py-1.5 rounded-xl text-[11px] max-w-[74%] shadow-md z-20 text-slate-800">
+        <div class="font-extrabold text-slate-900" id="chip-title">多摩川新線 運行中</div>
+        <div class="text-slate-600 text-[10px] mt-0.5" id="chip-sub">実在地図上の駅や街をタップして確認・延伸</div>
       </div>
 
       <!-- 右下：Subway Builder風ミニ凡例 -->
-      <div id="map-legend" class="absolute bottom-2 right-2 bg-white/92 border border-slate-300/80 px-2 py-1 rounded-lg text-[9px] text-slate-700 flex flex-col gap-0.5 z-10 pointer-events-none shadow-sm">
+      <div id="map-legend" class="absolute bottom-2 right-2 bg-white/95 border border-slate-300/80 px-2 py-1 rounded-lg text-[9px] text-slate-700 flex flex-col gap-0.5 z-10 pointer-events-none shadow-sm">
         <div class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-emerald-500 rounded"></span>地上/高架(速度)</div>
         <div class="flex items-center gap-1"><span class="inline-block w-3 h-0 border-t-2 border-dashed border-sky-600"></span>地下(シールド)</div>
         <div class="flex items-center gap-1"><span class="inline-block w-3 h-1 bg-pink-500 rounded"></span>既存他社線</div>
@@ -309,18 +308,18 @@
     </div>
 
     <!-- 遊び方モーダル -->
-    <div id="help-modal" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div id="help-modal" class="hidden absolute inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-4">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm md:max-w-md w-full p-4 md:p-5 shadow-2xl max-h-[85%] overflow-y-auto">
         <div class="flex items-center justify-between mb-2.5">
           <h2 class="text-sm md:text-base font-extrabold text-sky-300">沿線デベロッパー TOKYO WEST</h2>
           <button id="btn-close-help" class="text-slate-400 hover:text-white text-base font-bold px-2 cursor-pointer">✕</button>
         </div>
         <p class="text-xs md:text-sm text-slate-300 leading-relaxed mb-3">
-          実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、ゼロから自由な線形で私鉄路線を敷設し沿線の街を育てる2.5Dシミュレーションです。
+          実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、ゼロから私鉄路線を敷設し沿線の街を育てる2.5Dシミュレーションです。
         </p>
         <ul class="text-xs md:text-sm text-slate-300 space-y-2 list-disc pl-4 mb-4">
-          <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ホイール／ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。右ドラッグ（スマホは二本指）で回転・傾きも調整可能です。2D切替でさらに軽快に動作します。</li>
-          <li><strong class="text-white">線路先引き＆駅設置</strong>: 「線路を引く」で接線連続の直線・円弧で線形と構造（地上／高架／地下）を敷設し、「駅を設置」で線路上の好きな場所へ駅を配置します。Ctrl+Zで取り消し可能です。</li>
+          <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ホイール／ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。右ドラッグ（スマホは二本指）で回転・傾きも調整可能です。</li>
+          <li><strong class="text-white">ゼロから路線敷設＆直通</strong>: 地図上の好きな場所をクリック／タップして1駅目から新線を敷設できます。既存路線駅（二子玉川・調布・登戸・新百合ヶ丘・多摩センター・町田など）付近に繋ぐと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
           <li><strong class="text-white">種別・待避線</strong>: 急行や特急の停車駅をタップで設定。途中に<strong class="text-sky-300">2面4線（待避線）</strong>があると速達効果がフル発揮され、遠方の都心体感時間が大幅短縮します。</li>
           <li><strong class="text-white">沿線開発</strong>: 駅ごとの開発方針で周辺に3D開発ビルが自動成長し、大型ランドマークを直接建てて街の目玉を作れます。</li>
         </ul>
