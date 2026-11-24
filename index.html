@@ -69,6 +69,10 @@
     #panel-nav {
       border-top: 1px solid #1e293b;
     }
+    #map-wrapper.extend-cursor #map,
+    #map-wrapper.extend-cursor .maplibregl-canvas {
+      cursor: crosshair !important;
+    }
     @media (min-width: 900px) {
       #workspace {
         flex-direction: row;
@@ -78,13 +82,14 @@
         height: 100%;
       }
       #panel-area {
-        width: 390px;
+        width: 430px;
         height: 100%;
         min-height: 0;
         max-height: none;
         border-top: none;
         border-left: 1px solid rgba(148, 163, 184, 0.2);
         flex-shrink: 0;
+        font-size: 14px;
       }
       #panel-nav {
         order: -1;
@@ -96,12 +101,35 @@
         border-bottom: 2px solid #38bdf8;
       }
       #map-info-chip {
-        max-width: 420px;
+        max-width: 460px;
+        padding: 10px 14px;
+      }
+      #chip-title {
+        font-size: 14px;
+      }
+      #chip-sub {
+        font-size: 12px;
+      }
+      #map-legend {
+        font-size: 11px;
+        padding: 6px 10px;
+        gap: 4px;
+      }
+      .station-pill-marker {
+        font-size: 12px;
+        padding: 3px 10px;
+      }
+      .toast-item {
+        font-size: 13px;
+        padding: 8px 16px;
+      }
+      #panel-content {
+        padding: 14px 16px;
       }
     }
     @media (min-width: 1280px) {
       #panel-area {
-        width: 430px;
+        width: 470px;
       }
     }
     .panel-scroll {
@@ -185,26 +213,26 @@
       <div class="flex items-center gap-2.5 md:gap-4 min-w-0">
         <div class="hidden md:flex items-center gap-2 pr-3 border-r border-slate-700/80 shrink-0">
           <span class="text-base">🚃</span>
-          <span class="text-sm font-extrabold tracking-tight text-white">沿線デベロッパー</span>
+          <span class="text-base font-extrabold tracking-tight text-white">沿線デベロッパー</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">TOKYO WEST</span>
         </div>
         <div class="flex flex-col md:flex-row md:items-center md:gap-4 min-w-0">
           <div class="flex items-center gap-1.5">
-            <span id="hud-date" class="text-xs md:text-sm font-bold text-sky-300 tracking-wide">2026年4月</span>
-            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">東京西南部・実在2.5D</span>
+            <span id="hud-date" class="text-xs md:text-base font-bold text-sky-300 tracking-wide">2026年4月</span>
+            <span class="text-[10px] md:text-xs px-1.5 md:px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">東京西南部・実在2.5D</span>
           </div>
           <div class="flex items-baseline gap-2 md:gap-4 mt-0.5 md:mt-0">
-            <span id="hud-funds" class="text-sm md:text-base font-extrabold text-emerald-400 tabular-nums">450.0億円</span>
-            <span id="hud-pop" class="text-[11px] md:text-xs font-semibold text-slate-200 tabular-nums">沿線 21.4万人</span>
+            <span id="hud-funds" class="text-sm md:text-lg font-extrabold text-emerald-400 tabular-nums">500.0億円</span>
+            <span id="hud-pop" class="text-[11px] md:text-sm font-semibold text-slate-200 tabular-nums">沿線 0.0万人</span>
           </div>
         </div>
       </div>
       <div class="flex items-center gap-1 md:gap-1.5 shrink-0">
-        <button id="btn-speed-0" class="speed-btn px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="一時停止 (Space)">Ⅱ</button>
-        <button id="btn-speed-1" class="speed-btn active px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="通常速度 (1)">1x</button>
-        <button id="btn-speed-3" class="speed-btn px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="3倍速 (3)">3x</button>
-        <button id="btn-mute" class="ml-0.5 px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="効果音切替">🔊</button>
-        <button id="btn-help" class="px-2 md:px-2.5 py-1 rounded text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 cursor-pointer" title="遊び方">?</button>
+        <button id="btn-speed-0" class="speed-btn px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="一時停止 (Space)">Ⅱ</button>
+        <button id="btn-speed-1" class="speed-btn active px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="通常速度 (1)">1x</button>
+        <button id="btn-speed-3" class="speed-btn px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="3倍速 (3)">3x</button>
+        <button id="btn-mute" class="ml-0.5 px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="効果音切替">🔊</button>
+        <button id="btn-help" class="px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 cursor-pointer" title="遊び方">?</button>
       </div>
     </header>
 
@@ -216,18 +244,18 @@
       <div id="toast-box"></div>
 
       <!-- モードバナー（延伸モード中） -->
-      <div id="mode-banner" class="hidden absolute top-2 left-2 right-14 bg-sky-600/95 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-lg flex items-center justify-between gap-2 z-20">
+      <div id="mode-banner" class="hidden absolute top-2.5 left-2.5 right-16 md:right-auto md:max-w-lg bg-sky-600/95 text-white text-xs md:text-sm font-semibold px-3 md:px-4 py-1.5 md:py-2 rounded-lg shadow-lg flex items-center justify-between gap-3 z-20">
         <span id="mode-banner-text">実在マップをタップして新駅・線路を延伸</span>
-        <button id="btn-cancel-mode" class="bg-slate-900/40 hover:bg-slate-900/60 px-2 py-0.5 rounded text-[11px]">終了</button>
+        <button id="btn-cancel-mode" class="bg-slate-900/40 hover:bg-slate-900/60 px-2.5 py-1 rounded text-[11px] md:text-xs shrink-0 cursor-pointer">終了</button>
       </div>
 
       <!-- マップ右上フローティング操作（Subway Builder風ライトグラス） -->
       <div class="absolute top-2.5 right-2.5 flex flex-col gap-1.5 z-20">
-        <button id="btn-zoom-in" class="w-8 h-8 rounded-lg bg-white/95 text-slate-800 font-bold text-sm border border-slate-300 shadow active:scale-95" title="拡大">＋</button>
-        <button id="btn-zoom-out" class="w-8 h-8 rounded-lg bg-white/95 text-slate-800 font-bold text-sm border border-slate-300 shadow active:scale-95" title="縮小">－</button>
-        <button id="btn-view-toggle" class="w-8 h-8 rounded-lg bg-white/95 text-sky-700 font-extrabold text-[10px] border border-slate-300 shadow active:scale-95" title="2.5D/2D切替">2.5D</button>
-        <button id="btn-layer-speed" class="w-8 h-8 rounded-lg bg-white/95 text-emerald-700 font-extrabold text-[9px] border border-slate-300 shadow active:scale-95" title="速度ヒート表示切替">速度</button>
-        <button id="btn-center" class="w-8 h-8 rounded-lg bg-white/95 text-slate-700 text-xs border border-slate-300 shadow active:scale-95" title="視点リセット">⌖</button>
+        <button id="btn-zoom-in" class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/95 hover:bg-white text-slate-800 font-bold text-sm md:text-base border border-slate-300 shadow active:scale-95 cursor-pointer" title="拡大">＋</button>
+        <button id="btn-zoom-out" class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/95 hover:bg-white text-slate-800 font-bold text-sm md:text-base border border-slate-300 shadow active:scale-95 cursor-pointer" title="縮小">－</button>
+        <button id="btn-view-toggle" class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/95 hover:bg-white text-sky-700 font-extrabold text-[10px] md:text-xs border border-slate-300 shadow active:scale-95 cursor-pointer" title="2.5D/2D切替">2.5D</button>
+        <button id="btn-layer-speed" class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/95 hover:bg-white text-emerald-700 font-extrabold text-[9px] md:text-xs border border-slate-300 shadow active:scale-95 cursor-pointer" title="速度ヒート表示切替">速度</button>
+        <button id="btn-center" class="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/95 hover:bg-white text-slate-700 text-xs md:text-base border border-slate-300 shadow active:scale-95 cursor-pointer" title="視点リセット">⌖</button>
       </div>
 
       <!-- 左下：選択地点のミニ情報チップ -->
@@ -237,7 +265,7 @@
       </div>
 
       <!-- 右下：Subway Builder風ミニ凡例 -->
-      <div class="absolute bottom-2 right-2 bg-white/92 border border-slate-300/80 px-2 py-1 rounded-lg text-[9px] text-slate-700 flex flex-col gap-0.5 z-10 pointer-events-none shadow-sm">
+      <div id="map-legend" class="absolute bottom-2 right-2 bg-white/92 border border-slate-300/80 px-2 py-1 rounded-lg text-[9px] text-slate-700 flex flex-col gap-0.5 z-10 pointer-events-none shadow-sm">
         <div class="flex items-center gap-1"><span class="inline-block w-2.5 h-1 bg-emerald-500 rounded"></span>自社線/速度</div>
         <div class="flex items-center gap-1"><span class="inline-block w-2.5 h-1 bg-pink-500 rounded"></span>既存他社線</div>
         <div class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-amber-500 bg-amber-300/40"></span>直通可</div>
@@ -246,25 +274,26 @@
 
     <!-- 下部操作パネル -->
     <section id="panel-area">
+      <div id="tutorial-box" class="shrink-0 px-3 md:px-4 pt-2.5 md:pt-3"></div>
       <div id="panel-content" class="panel-scroll px-3 py-2.5"></div>
 
       <!-- 4タブナビゲーション（モバイル: 下部 / PC: サイドバー上部） -->
       <nav id="panel-nav" class="grid grid-cols-4 bg-slate-950 shrink-0">
-        <button data-tab="route" class="tab-btn active py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
-          <span class="text-sm leading-none">🚉</span>
-          <span class="text-[10px] font-bold">路線・駅</span>
+        <button data-tab="route" class="tab-btn active py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
+          <span class="text-sm md:text-base leading-none">🚉</span>
+          <span class="text-[10px] md:text-xs font-bold">路線・駅</span>
         </button>
-        <button data-tab="service" class="tab-btn py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
-          <span class="text-sm leading-none">🚄</span>
-          <span class="text-[10px] font-bold">種別・直通</span>
+        <button data-tab="service" class="tab-btn py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
+          <span class="text-sm md:text-base leading-none">🚄</span>
+          <span class="text-[10px] md:text-xs font-bold">種別・直通</span>
         </button>
-        <button data-tab="dev" class="tab-btn py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
-          <span class="text-sm leading-none">🏙️</span>
-          <span class="text-[10px] font-bold">沿線開発</span>
+        <button data-tab="dev" class="tab-btn py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
+          <span class="text-sm md:text-base leading-none">🏙️</span>
+          <span class="text-[10px] md:text-xs font-bold">沿線開発</span>
         </button>
-        <button data-tab="finance" class="tab-btn py-2 flex flex-col items-center justify-center gap-0.5 text-slate-400">
-          <span class="text-sm leading-none">📊</span>
-          <span class="text-[10px] font-bold">経営・統計</span>
+        <button data-tab="finance" class="tab-btn py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
+          <span class="text-sm md:text-base leading-none">📊</span>
+          <span class="text-[10px] md:text-xs font-bold">経営・統計</span>
         </button>
       </nav>
     </section>
@@ -273,20 +302,23 @@
     <!-- 遊び方モーダル -->
     <div id="help-modal" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm md:max-w-md w-full p-4 md:p-5 shadow-2xl max-h-[85%] overflow-y-auto">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-sm font-extrabold text-sky-300">沿線デベロッパー TOKYO WEST</h2>
-          <button id="btn-close-help" class="text-slate-400 hover:text-white text-base font-bold px-2">✕</button>
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="text-sm md:text-base font-extrabold text-sky-300">沿線デベロッパー TOKYO WEST</h2>
+          <button id="btn-close-help" class="text-slate-400 hover:text-white text-base font-bold px-2 cursor-pointer">✕</button>
         </div>
-        <p class="text-xs text-slate-300 leading-relaxed mb-2.5">
-          実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、私鉄路線と沿線の街を育てる2.5Dシミュレーションです。
+        <p class="text-xs md:text-sm text-slate-300 leading-relaxed mb-3">
+          実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、ゼロから私鉄路線を敷設し沿線の街を育てる2.5Dシミュレーションです。
         </p>
-        <ul class="text-xs text-slate-300 space-y-1.5 list-disc pl-4 mb-3">
+        <ul class="text-xs md:text-sm text-slate-300 space-y-2 list-disc pl-4 mb-4">
           <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ホイール／ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。右ドラッグ（スマホは二本指）で回転・傾きも調整可能です。</li>
-          <li><strong class="text-white">路線・直通</strong>: 「＋新駅を延伸」で地図上の好きな場所へ延伸。既存路線駅（二子玉川・調布・登戸・新百合ヶ丘・多摩センター・町田など）付近に繋ぐと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
+          <li><strong class="text-white">ゼロから路線敷設＆直通</strong>: 地図上の好きな場所をクリック／タップして1駅目から新線を敷設できます。既存路線駅（二子玉川・調布・登戸・新百合ヶ丘・多摩センター・町田など）付近に繋ぐと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
           <li><strong class="text-white">種別・待避線</strong>: 急行や特急の停車駅をタップで設定。途中に<strong class="text-sky-300">2面4線（待避線）</strong>があると速達効果がフル発揮され、遠方の都心体感時間が大幅短縮します。</li>
           <li><strong class="text-white">沿線開発</strong>: 駅ごとの開発方針で周辺に3D開発ビルが自動成長し、大型ランドマークを直接建てて街の目玉を作れます。</li>
         </ul>
-        <button id="btn-start-play" class="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">プレイに戻る</button>
+        <div class="flex gap-2">
+          <button id="btn-show-tutorial" class="flex-1 py-2 md:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-sky-300 font-bold text-xs md:text-sm cursor-pointer">チュートリアル表示</button>
+          <button id="btn-start-play" class="flex-1 py-2 md:py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs md:text-sm cursor-pointer">プレイに戻る</button>
+        </div>
       </div>
     </div>
   </div>
@@ -493,13 +525,15 @@
     month: 4,
     tickInMonth: 0,
     speed: 1,
-    funds: 450.0,
+    funds: 500.0,
     activeTab: 'route',
-    buildMode: null,
+    buildMode: 'extend',
     selectedPoint: null, // { lat, lng, muni }
     selectedStationId: null,
     is25D: true,
     showSpeedHeat: true,
+    tutorialVisible: true,
+    tutorialSkippedDirect: false,
 
     myStations: [],
     directAgreements: {},
@@ -558,31 +592,15 @@
   }
 
   function initWorld() {
-    const futako = EXISTING_STATIONS.find(s => s.id === 'ex_futako');
-    const tamaC = EXISTING_STATIONS.find(s => s.id === 'ex_tamacenter');
-
-    const starterSpecs = [
-      { id: 'st_1', name: '二子玉川', lat: futako.lat, lng: futako.lng, hasPassing: true, existingId: futako.id, zoning: 'commercial' },
-      { id: 'st_2', name: '狛江南', lat: 35.6295, lng: 139.5760, hasPassing: false, existingId: null, zoning: 'residential' },
-      { id: 'st_3', name: '稲城中央', lat: 35.6362, lng: 139.5060, hasPassing: false, existingId: null, zoning: 'residential' },
-      { id: 'st_4', name: '多摩センター', lat: tamaC.lat, lng: tamaC.lng, hasPassing: true, existingId: tamaC.id, zoning: 'tourism' }
-    ];
-
-    state.myStations = starterSpecs.map(spec => createStationState(spec));
-
-    state.myStations.forEach((st, idx) => {
-      const isEnd = idx === 0 || idx === state.myStations.length - 1;
-      state.services[0].stops[st.id] = true;
-      state.services[1].stops[st.id] = isEnd || idx === 2;
-      state.services[2].stops[st.id] = isEnd;
-      state.services[3].stops[st.id] = isEnd;
-    });
-
-    state.selectedStationId = state.myStations[2].id;
-    state.selectedPoint = { lat: state.myStations[2].lat, lng: state.myStations[2].lng, muni: getNearestMunicipality(state.myStations[2].lat, state.myStations[2].lng) };
+    state.myStations = [];
+    state.directAgreements = {};
+    state.services.forEach(sv => { sv.stops = {}; sv.direct = false; });
+    state.selectedStationId = null;
+    state.selectedPoint = { lat: 35.623, lng: 139.572, muni: getNearestMunicipality(35.623, 139.572) };
+    state.buildMode = 'extend';
 
     recalculateSimulation(false);
-    state.initialCorridorPop = getCorridorPop();
+    state.initialCorridorPop = 0;
     recordHistory();
     rebuildTrainActors();
   }
@@ -618,7 +636,23 @@
 
   function recalculateSimulation(advanceGrowth) {
     const n = state.myStations.length;
-    if (n === 0) return;
+    if (n < 2) {
+      state.myStations.forEach(st => {
+        st.ridership = 0;
+        st.congestion = 0;
+      });
+      state.finance = {
+        fareRev: 0,
+        expressRev: 0,
+        estateRev: 0,
+        trackCost: 0,
+        opCost: 0,
+        directCost: 0,
+        landmarkCost: 0,
+        netProfit: 0
+      };
+      return;
+    }
 
     const hasPassing = hasIntermediatePassingTrack();
     const activeServices = state.services.filter(s => s.enabled && s.freq > 0);
@@ -854,8 +888,8 @@
     map = new maplibregl.Map({
       container: 'map',
       style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: [139.572, 35.623],
-      zoom: 13.6,
+      center: [139.555, 35.626],
+      zoom: window.innerWidth >= 900 ? 12.2 : 11.8,
       pitch: 58,
       bearing: -18,
       antialias: true,
@@ -1219,7 +1253,11 @@
   }
 
   function updateTrainGeoJSON() {
-    if (!mapReady || !map || !map.getSource('my-trains') || state.myStations.length < 2) return;
+    if (!mapReady || !map || !map.getSource('my-trains')) return;
+    if (state.myStations.length < 2) {
+      map.getSource('my-trains').setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
     const features = state.trains.map(tr => {
       const segIdx = Math.min(state.myStations.length - 2, Math.max(0, Math.floor(tr.progress)));
       const frac = tr.progress - segIdx;
@@ -1254,28 +1292,57 @@
     document.getElementById('hud-date').textContent = `${state.year}年${state.month}月`;
     const fundsEl = document.getElementById('hud-funds');
     fundsEl.textContent = `${state.funds.toFixed(1)}億円`;
-    fundsEl.className = `text-sm md:text-base font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    fundsEl.className = `text-sm md:text-lg font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
 
     const pop = getCorridorPop();
-    const diff = pop - state.initialCorridorPop;
-    const diffStr = diff >= 0 ? `+${(diff / 10000).toFixed(2)}` : `${(diff / 10000).toFixed(2)}`;
-    document.getElementById('hud-pop').textContent = `沿線 ${(pop / 10000).toFixed(1)}万人 (${diffStr})`;
+    const growthDiff = state.myStations.reduce((acc, st) => acc + (st.areaPop - st.initialPop), 0);
+    if (state.myStations.length === 0) {
+      document.getElementById('hud-pop').textContent = '沿線 0.0万人（未開業）';
+    } else {
+      const diffStr = growthDiff >= 0 ? `+${(growthDiff / 10000).toFixed(2)}` : `${(growthDiff / 10000).toFixed(2)}`;
+      document.getElementById('hud-pop').textContent = `沿線 ${(pop / 10000).toFixed(1)}万人 (${diffStr})`;
+    }
 
     const banner = document.getElementById('mode-banner');
-    if (state.buildMode === 'extend') banner.classList.remove('hidden');
-    else banner.classList.add('hidden');
+    const bannerText = document.getElementById('mode-banner-text');
+    const mapWrap = document.getElementById('map-wrapper');
+    if (state.buildMode === 'extend') {
+      banner.classList.remove('hidden');
+      if (mapWrap) mapWrap.classList.add('extend-cursor');
+      if (state.myStations.length === 0) {
+        bannerText.textContent = 'マップをクリック／タップして1駅目（始発駅）を建設';
+      } else if (state.myStations.length === 1) {
+        bannerText.textContent = '2駅目をマップで選んで線路を開通させよう（12km以内）';
+      } else {
+        bannerText.textContent = 'マップをクリック／タップして新駅・線路を延伸';
+      }
+    } else {
+      banner.classList.add('hidden');
+      if (mapWrap) mapWrap.classList.remove('extend-cursor');
+    }
 
     updateMapChip();
+    renderTutorial();
   }
 
   function updateMapChip() {
     const titleEl = document.getElementById('chip-title');
     const subEl = document.getElementById('chip-sub');
+    if (state.myStations.length === 0) {
+      if (state.selectedPoint) {
+        const m = state.selectedPoint.muni;
+        titleEl.textContent = '🛤️ 新規路線を敷設しよう';
+        subEl.textContent = `マップをタップして1駅目を建設（例: 二子玉川・調布・登戸付近）`;
+      }
+      return;
+    }
     const st = state.myStations.find(s => s.id === state.selectedStationId);
     if (st && state.selectedPoint && haversineKm(st.lat, st.lng, state.selectedPoint.lat, state.selectedPoint.lng) < 0.3) {
       const directTag = st.existingId && state.directAgreements[st.existingId] ? ' [直通中]' : '';
       titleEl.textContent = `🚉 ${st.name}駅${directTag} (${st.muniName})`;
-      subEl.textContent = `都心体感 ${st.hubTime}分 / 乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 / 混雑 ${st.congestion}%`;
+      subEl.textContent = state.myStations.length < 2
+        ? '2駅目を建設すると運行が開始されます'
+        : `都心体感 ${st.hubTime}分 / 乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 / 混雑 ${st.congestion}%`;
       return;
     }
     if (state.selectedPoint) {
@@ -1284,6 +1351,116 @@
       titleEl.textContent = `${m.name}${nearEx ? `・${nearEx.name}駅付近` : ''}`;
       subEl.textContent = `自治体人口 ${m.pop.toLocaleString()}人 / 密度 ${Math.round(m.pop / m.area).toLocaleString()}人/km²`;
     }
+  }
+
+  // --- インタラクティブ・チュートリアル ---
+  function getCurrentTutorialStep() {
+    const n = state.myStations.length;
+    const hasDirect = Object.keys(state.directAgreements).length > 0;
+    const hasFastService = state.services.some(sv => sv.id !== 'local' && sv.enabled);
+    const hasPassing = n >= 3 && hasIntermediatePassingTrack();
+    const hasLandmark = state.myStations.some(st => !!st.landmark);
+
+    if (n === 0) {
+      return {
+        step: 1, total: 6,
+        title: '1駅目（始発駅）を建てよう',
+        desc: 'マップ上の好きな場所をクリックして始発駅を建設します。二子玉川・調布・登戸など既存駅（白丸）の近くを選ぶと自動で接続され、後から直通運転できます。',
+        ctaLabel: state.buildMode === 'extend' ? null : '敷設モードにする',
+        ctaAction: 'tut-start-extend'
+      };
+    }
+    if (n === 1) {
+      return {
+        step: 2, total: 6,
+        title: '2駅目を繋いで開通させよう',
+        desc: '1駅目から12km以内の街をクリックして線路を敷設しよう。2駅が繋がると列車が走り始め、運賃収入が入ります！',
+        ctaLabel: state.buildMode === 'extend' ? null : '延伸モードにする',
+        ctaAction: 'tut-start-extend'
+      };
+    }
+    if (n === 2) {
+      return {
+        step: 3, total: 6,
+        title: '3駅目へ路線を伸ばそう',
+        desc: 'さらにもう1駅延伸して沿線を広げよう。途中駅ができると、次ステップの待避線や急行運転が活きてきます。',
+        ctaLabel: state.buildMode === 'extend' ? null : '＋ 新駅を延伸',
+        ctaAction: 'tut-start-extend'
+      };
+    }
+    if (!hasDirect && !state.tutorialSkippedDirect) {
+      const hasConn = state.myStations.some(s => s.existingId);
+      return {
+        step: 4, total: 6,
+        title: '既存路線と直通運転協定を結ぼう',
+        desc: hasConn
+          ? '「路線・駅」タブの「協定締結」ボタンを押すと、都心への乗換ペナルティ（10分）が0分になり乗客が急増します！'
+          : '既存駅（白丸）の近くに延伸すると直通運転協定を結べます。今はスキップして次へ進むこともできます。',
+        ctaLabel: hasConn ? '路線・駅タブを開く' : 'このステップをスキップ',
+        ctaAction: hasConn ? 'tut-go-route' : 'tut-skip-direct'
+      };
+    }
+    if (!hasFastService || !hasPassing) {
+      return {
+        step: 5, total: 6,
+        title: '待避線＆急行でスピードアップ',
+        desc: !hasPassing
+          ? '中間駅を選んで「待避線拡張 (35億)」を行うと、急行・特急が各停を追い抜いて100%の速度を発揮できます。'
+          : '「種別・直通」タブで準急・急行・特急をONにして、通過駅（｜）を設定してみよう！',
+        ctaLabel: !hasPassing ? '路線・駅タブを開く' : '種別・直通タブを開く',
+        ctaAction: !hasPassing ? 'tut-go-route' : 'tut-go-service'
+      };
+    }
+    if (!hasLandmark) {
+      return {
+        step: 6, total: 6,
+        title: '沿線開発＆大型ランドマーク建設',
+        desc: '「沿線開発」タブで駅ごとの開発方針を選び、商業ビルやタワマンなどの大型ランドマークを1つ建てて街を育てよう！',
+        ctaLabel: state.activeTab === 'dev' ? null : '沿線開発タブを開く',
+        ctaAction: 'tut-go-dev'
+      };
+    }
+    return {
+      step: 7, total: 6, done: true,
+      title: '🎉 チュートリアル完了！',
+      desc: '基本操作をマスターしました！自由に路線を延伸し、黒字経営と沿線人口の拡大を目指そう。'
+    };
+  }
+
+  function renderTutorial() {
+    const box = document.getElementById('tutorial-box');
+    if (!box) return;
+    if (!state.tutorialVisible) {
+      box.innerHTML = '';
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+    const t = getCurrentTutorialStep();
+    const pct = t.done ? 100 : Math.round(((t.step - 1) / t.total) * 100);
+    box.innerHTML = `
+      <div class="bg-sky-950/75 border border-sky-500/40 rounded-xl p-2.5 md:p-3.5 shadow-sm">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="text-[10px] md:text-xs font-extrabold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30 shrink-0">
+              ${t.done ? 'COMPLETE' : `STEP ${t.step}/${t.total}`}
+            </span>
+            <span class="text-xs md:text-sm font-extrabold text-white truncate">${t.title}</span>
+          </div>
+          <button data-tut-action="tut-close" class="text-slate-400 hover:text-white text-xs md:text-sm px-1 shrink-0 cursor-pointer" title="ガイドを閉じる">✕</button>
+        </div>
+        <div class="w-full h-1 bg-slate-800 rounded-full overflow-hidden mb-1.5">
+          <div class="h-full bg-sky-400 transition-all duration-300" style="width:${pct}%"></div>
+        </div>
+        <p class="text-[11px] md:text-xs text-slate-200 leading-relaxed">${t.desc}</p>
+        ${t.ctaLabel ? `
+          <div class="mt-2 flex justify-end">
+            <button data-tut-action="${t.ctaAction}" class="px-2.5 md:px-3 py-1 md:py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-[11px] md:text-xs cursor-pointer">
+              ${t.ctaLabel}
+            </button>
+          </div>` : ''}
+      </div>
+    `;
   }
 
   function renderPanel() {
@@ -1296,27 +1473,47 @@
 
   // --- タブ1: 路線・駅 ---
   function renderRouteTab(container) {
+    const n = state.myStations.length;
     const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0];
     const passingOk = hasIntermediatePassingTrack();
     const canDirectStations = state.myStations.filter(s => s.existingId);
 
+    if (n === 0) {
+      container.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <div class="text-xs md:text-base font-extrabold text-white">新線建設プロジェクト</div>
+            <div class="text-[10px] md:text-xs text-slate-400 mt-0.5">まずは始発駅をマップ上に設置しよう</div>
+          </div>
+          <button data-action="toggle-extend" class="px-3 md:px-3.5 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-bold cursor-pointer ${state.buildMode === 'extend' ? 'bg-rose-600 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'} shadow">
+            ${state.buildMode === 'extend' ? '敷設モード中' : '＋ 1駅目を建設'}
+          </button>
+        </div>
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-3 md:p-4 text-xs md:text-sm text-slate-300 space-y-2 leading-relaxed">
+          <p>地図上の好きな地点をクリック／タップすると<strong class="text-white">1駅目（始発駅）</strong>を建設できます。</p>
+          <p class="text-[11px] md:text-xs text-amber-300">💡 ヒント：二子玉川・調布・登戸・新百合ヶ丘・多摩センターなどの既存駅（白丸）の近くを選ぶと、後から直通運転協定を結べます。</p>
+        </div>
+      `;
+      return;
+    }
+
     let directHtml = '';
     if (canDirectStations.length > 0) {
-      directHtml = `<div class="mt-2.5">
-        <div class="text-[11px] font-bold text-amber-300 mb-1">既存路線との直通運転協定</div>
-        <div class="space-y-1.5">
+      directHtml = `<div class="mt-3">
+        <div class="text-[11px] md:text-xs font-bold text-amber-300 mb-1.5">既存路線との直通運転協定</div>
+        <div class="space-y-2">
           ${canDirectStations.map(cs => {
             const ex = EXISTING_STATIONS.find(e => e.id === cs.existingId);
             const active = !!state.directAgreements[ex.id];
             return `
-              <div class="flex items-center justify-between bg-slate-800/80 border ${active ? 'border-amber-400/70' : 'border-slate-700'} rounded-lg px-2.5 py-1.5">
-                <div class="min-w-0">
-                  <div class="text-xs font-bold text-white">${cs.name} ⇔ ${ex.lines[0]}</div>
-                  <div class="text-[10px] text-slate-400">${active ? `直通中 (線路使用料 ${ex.directFee}億/月・乗換0分)` : `協定費 ${ex.directCost}億 / 乗換ペナルティ-10分`}</div>
+              <div class="flex items-center justify-between bg-slate-800/80 border ${active ? 'border-amber-400/70' : 'border-slate-700'} rounded-lg px-2.5 md:px-3 py-2">
+                <div class="min-w-0 pr-2">
+                  <div class="text-xs md:text-sm font-bold text-white">${cs.name} ⇔ ${ex.lines[0]}</div>
+                  <div class="text-[10px] md:text-xs text-slate-400">${active ? `直通中 (線路使用料 ${ex.directFee}億/月・乗換0分)` : `協定費 ${ex.directCost}億 / 乗換ペナルティ-10分`}</div>
                 </div>
                 ${active
-                  ? `<span class="text-[10px] font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">締結済</span>`
-                  : `<button data-action="sign-direct" data-exid="${ex.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 shrink-0">協定締結</button>`
+                  ? `<span class="text-[10px] md:text-xs font-bold px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">締結済</span>`
+                  : `<button data-action="sign-direct" data-exid="${ex.id}" class="text-[11px] md:text-xs font-bold px-2.5 md:px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 shrink-0 cursor-pointer">協定締結</button>`
                 }
               </div>`;
           }).join('')}
@@ -1325,37 +1522,37 @@
     }
 
     container.innerHTML = `
-      <div class="flex items-center justify-between gap-2 mb-2">
+      <div class="flex items-center justify-between gap-2 mb-2.5">
         <div>
-          <div class="text-xs font-extrabold text-white">多摩川新線（全${state.myStations.length}駅・${getLineLengthKm().toFixed(1)}km）</div>
-          <div class="text-[10px] text-slate-400">待避線: ${passingOk ? '<span class="text-emerald-400">追い越し可能</span>' : '<span class="text-amber-300">中間駅に未設置（急行減速）</span>'}</div>
+          <div class="text-xs md:text-base font-extrabold text-white">自社新線（全${n}駅・${getLineLengthKm().toFixed(1)}km）</div>
+          <div class="text-[10px] md:text-xs text-slate-400 mt-0.5">${n < 2 ? 'あと1駅繋ぐと運行開始' : `待避線: ${passingOk ? '<span class="text-emerald-400">追い越し可能</span>' : '<span class="text-amber-300">中間駅に未設置（急行減速）</span>'}`}</div>
         </div>
-        <button data-action="toggle-extend" class="px-3 py-1.5 rounded-lg text-xs font-bold ${state.buildMode === 'extend' ? 'bg-rose-600 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'} shadow">
+        <button data-action="toggle-extend" class="px-3 md:px-3.5 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-bold cursor-pointer ${state.buildMode === 'extend' ? 'bg-rose-600 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'} shadow shrink-0">
           ${state.buildMode === 'extend' ? '延伸を終了' : '＋ 新駅を延伸'}
         </button>
       </div>
 
       ${st ? `
-      <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5">
+      <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5 md:p-3.5">
         <div class="flex items-center justify-between gap-2">
           <div>
-            <div class="text-xs font-bold text-sky-300">選択駅: ${st.name}駅</div>
-            <div class="text-[10px] text-slate-300 mt-0.5">都心体感 <strong class="text-white">${st.hubTime}分</strong> ・乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 ・混雑 ${st.congestion}%</div>
+            <div class="text-xs md:text-sm font-bold text-sky-300">選択駅: ${st.name}駅</div>
+            <div class="text-[10px] md:text-xs text-slate-300 mt-1">${n < 2 ? '開業準備中（2駅目を建設してください）' : `都心体感 <strong class="text-white">${st.hubTime}分</strong> ・乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 ・混雑 ${st.congestion}%`}</div>
           </div>
           ${st.hasPassing
-            ? `<span class="text-[10px] font-bold px-2 py-1 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40">2面4線 済</span>`
-            : `<button data-action="upgrade-passing" data-stid="${st.id}" class="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white shrink-0">待避線拡張 (35億)</button>`
+            ? `<span class="text-[10px] md:text-xs font-bold px-2.5 py-1 rounded bg-sky-500/20 text-sky-300 border border-sky-400/40 shrink-0">2面4線 済</span>`
+            : `<button data-action="upgrade-passing" data-stid="${st.id}" class="text-[11px] md:text-xs font-bold px-2.5 md:px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white shrink-0 cursor-pointer">待避線拡張 (35億)</button>`
           }
         </div>
       </div>` : ''}
 
       ${directHtml}
 
-      <div class="mt-2.5">
-        <div class="text-[10px] font-bold text-slate-400 mb-1">自社駅一覧（タップでフォーカス）</div>
-        <div class="flex flex-wrap gap-1.5">
+      <div class="mt-3">
+        <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">自社駅一覧（クリックでフォーカス）</div>
+        <div class="flex flex-wrap gap-1.5 md:gap-2">
           ${state.myStations.map(s => `
-            <button data-action="select-station" data-stid="${s.id}" class="px-2.5 py-1 rounded-full text-[11px] font-semibold border ${s.id === state.selectedStationId ? 'bg-sky-600 text-white border-sky-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">
+            <button data-action="select-station" data-stid="${s.id}" class="px-2.5 md:px-3 py-1 md:py-1.5 rounded-full text-[11px] md:text-xs font-semibold border cursor-pointer ${s.id === state.selectedStationId ? 'bg-sky-600 text-white border-sky-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'}">
               ${s.name}${s.hasPassing ? ' [4線]' : ''}
             </button>
           `).join('')}
@@ -1366,27 +1563,35 @@
 
   // --- タブ2: 種別・直通 ---
   function renderServiceTab(container) {
+    if (state.myStations.length < 2) {
+      container.innerHTML = `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
+          2駅以上を線路で繋ぐと、種別（各停・準急・急行・特急）の運行本数や停車駅、直通運転を設定できるようになります。
+        </div>`;
+      return;
+    }
+
     const hasPassing = hasIntermediatePassingTrack();
     const hasDirect = getConnectedDirectStations().length > 0;
 
     container.innerHTML = `
-      <div class="flex items-center justify-between mb-1.5">
-        <div class="text-xs font-extrabold text-white">種別・停車駅エディタ（1時間あたり）</div>
-        <span class="text-[10px] ${hasPassing ? 'text-emerald-400' : 'text-amber-300'}">${hasPassing ? '待避線OK' : '⚠ 待避線なし'}</span>
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs md:text-sm font-extrabold text-white">種別・停車駅エディタ（1時間あたり）</div>
+        <span class="text-[10px] md:text-xs font-bold ${hasPassing ? 'text-emerald-400' : 'text-amber-300'}">${hasPassing ? '待避線OK' : '⚠ 待避線なし'}</span>
       </div>
 
-      <div class="grid grid-cols-4 gap-1.5 mb-2">
+      <div class="grid grid-cols-4 gap-1.5 md:gap-2 mb-3">
         ${state.services.map(sv => `
-          <div class="bg-slate-800/90 border ${sv.enabled ? 'border-slate-500' : 'border-slate-800 opacity-60'} rounded-lg p-1.5 flex flex-col items-center gap-1">
-            <button data-action="toggle-service" data-svid="${sv.id}" class="w-full py-0.5 rounded text-[11px] font-extrabold" style="background:${sv.enabled ? sv.color : '#334155'};color:${sv.enabled ? '#0f172a' : '#94a3b8'}">
+          <div class="bg-slate-800/90 border ${sv.enabled ? 'border-slate-500' : 'border-slate-800 opacity-60'} rounded-lg p-1.5 md:p-2 flex flex-col items-center gap-1.5">
+            <button data-action="toggle-service" data-svid="${sv.id}" class="w-full py-1 rounded text-[11px] md:text-xs font-extrabold cursor-pointer" style="background:${sv.enabled ? sv.color : '#334155'};color:${sv.enabled ? '#0f172a' : '#94a3b8'}">
               ${sv.name} ${sv.enabled ? 'ON' : 'OFF'}
             </button>
-            <div class="flex items-center gap-1 text-[10px] text-slate-200">
-              <button data-action="freq-down" data-svid="${sv.id}" class="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 font-bold">-</button>
-              <span class="w-7 text-center font-bold tabular-nums">${sv.freq}本</span>
-              <button data-action="freq-up" data-svid="${sv.id}" class="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 font-bold">+</button>
+            <div class="flex items-center gap-1 text-[10px] md:text-xs text-slate-200">
+              <button data-action="freq-down" data-svid="${sv.id}" class="w-5 h-5 md:w-6 md:h-6 rounded bg-slate-700 hover:bg-slate-600 font-bold cursor-pointer">-</button>
+              <span class="w-7 md:w-9 text-center font-bold tabular-nums">${sv.freq}本</span>
+              <button data-action="freq-up" data-svid="${sv.id}" class="w-5 h-5 md:w-6 md:h-6 rounded bg-slate-700 hover:bg-slate-600 font-bold cursor-pointer">+</button>
             </div>
-            <button data-action="toggle-sv-direct" data-svid="${sv.id}" class="w-full py-0.5 rounded text-[9px] font-bold border ${sv.direct && hasDirect ? 'bg-amber-500/20 text-amber-300 border-amber-400/60' : 'bg-slate-900 text-slate-400 border-slate-700'}">
+            <button data-action="toggle-sv-direct" data-svid="${sv.id}" class="w-full py-1 rounded text-[9px] md:text-[11px] font-bold border cursor-pointer ${sv.direct && hasDirect ? 'bg-amber-500/20 text-amber-300 border-amber-400/60' : 'bg-slate-900 text-slate-400 border-slate-700'}">
               ${sv.direct && hasDirect ? '直通ON' : '直通OFF'}
             </button>
           </div>
@@ -1394,31 +1599,31 @@
       </div>
 
       <div class="bg-slate-950/70 border border-slate-800 rounded-xl overflow-hidden">
-        <table class="w-full text-[11px] border-collapse">
+        <table class="w-full text-[11px] md:text-xs border-collapse">
           <thead>
             <tr class="bg-slate-900 text-slate-400 border-b border-slate-800">
-              <th class="text-left py-1.5 px-2 font-semibold">駅名</th>
-              ${state.services.map(sv => `<th class="py-1.5 px-1 text-center font-bold" style="color:${sv.color}">${sv.name}</th>`).join('')}
-              <th class="py-1.5 px-2 text-right font-semibold">都心</th>
+              <th class="text-left py-2 px-2.5 font-semibold">駅名</th>
+              ${state.services.map(sv => `<th class="py-2 px-1 text-center font-bold" style="color:${sv.color}">${sv.name}</th>`).join('')}
+              <th class="py-2 px-2.5 text-right font-semibold">都心</th>
             </tr>
           </thead>
           <tbody>
             ${state.myStations.map((st, idx) => `
               <tr class="border-b border-slate-800/70 last:border-0">
-                <td class="py-1.5 px-2 font-bold text-slate-200 truncate max-w-[92px]">
-                  ${st.name}${st.hasPassing ? '<span class="text-[9px] text-sky-400 ml-0.5">4</span>' : ''}
+                <td class="py-1.5 md:py-2 px-2.5 font-bold text-slate-200 truncate max-w-[96px] md:max-w-[130px]">
+                  ${st.name}${st.hasPassing ? '<span class="text-[9px] md:text-[11px] text-sky-400 ml-1">4線</span>' : ''}
                 </td>
                 ${state.services.map(sv => {
                   const stop = !!sv.stops[st.id];
                   const locked = sv.id === 'local' || idx === 0 || idx === state.myStations.length - 1;
                   return `
-                    <td class="py-1 text-center">
-                      <button data-action="toggle-stop" data-svid="${sv.id}" data-stid="${st.id}" class="w-6 h-6 rounded-full text-xs font-extrabold ${stop ? 'text-slate-950' : 'bg-slate-800 text-slate-500'} ${locked ? 'opacity-80' : ''}" style="${stop ? `background:${sv.color}` : ''}">
+                    <td class="py-1.5 text-center">
+                      <button data-action="toggle-stop" data-svid="${sv.id}" data-stid="${st.id}" class="w-6 h-6 md:w-7 md:h-7 rounded-full text-xs md:text-sm font-extrabold cursor-pointer ${stop ? 'text-slate-950' : 'bg-slate-800 text-slate-500'} ${locked ? 'opacity-80' : ''}" style="${stop ? `background:${sv.color}` : ''}">
                         ${stop ? '●' : '｜'}
                       </button>
                     </td>`;
                 }).join('')}
-                <td class="py-1.5 px-2 text-right font-bold tabular-nums ${st.hubTime <= 35 ? 'text-emerald-400' : (st.hubTime <= 50 ? 'text-amber-300' : 'text-rose-400')}">
+                <td class="py-1.5 md:py-2 px-2.5 text-right font-bold tabular-nums ${st.hubTime <= 35 ? 'text-emerald-400' : (st.hubTime <= 50 ? 'text-amber-300' : 'text-rose-400')}">
                   ${st.hubTime}分
                 </td>
               </tr>
@@ -1432,48 +1637,54 @@
   // --- タブ3: 沿線開発 ---
   function renderDevTab(container) {
     const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0];
-    if (!st) return;
+    if (!st) {
+      container.innerHTML = `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
+          駅を建設すると、駅ごとの開発方針（ゾーニング）や大型ランドマークの建設ができるようになります。
+        </div>`;
+      return;
+    }
     const currentLm = st.landmark ? LANDMARKS.find(l => l.id === st.landmark) : null;
 
     container.innerHTML = `
-      <div class="flex items-center justify-between gap-2 mb-2">
-        <div class="text-xs font-extrabold text-white">沿線開発: <span class="text-sky-300">${st.name}駅</span></div>
-        <div class="flex gap-1 overflow-x-auto max-w-[55%]">
+      <div class="flex items-center justify-between gap-2 mb-2.5">
+        <div class="text-xs md:text-base font-extrabold text-white shrink-0">沿線開発: <span class="text-sky-300">${st.name}駅</span></div>
+        <div class="flex gap-1.5 overflow-x-auto max-w-[55%]">
           ${state.myStations.map(s => `
-            <button data-action="select-station" data-stid="${s.id}" class="px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${s.id === st.id ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400'}">${s.name}</button>
+            <button data-action="select-station" data-stid="${s.id}" class="px-2 md:px-2.5 py-1 rounded text-[10px] md:text-xs font-bold shrink-0 cursor-pointer ${s.id === st.id ? 'bg-sky-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'}">${s.name}</button>
           `).join('')}
         </div>
       </div>
 
-      <div class="mb-2.5">
-        <div class="text-[10px] font-bold text-slate-400 mb-1">一般市街地の開発方針（3D自動成長）</div>
-        <div class="grid grid-cols-4 gap-1.5">
+      <div class="mb-3">
+        <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">一般市街地の開発方針（3D自動成長）</div>
+        <div class="grid grid-cols-4 gap-1.5 md:gap-2">
           ${Object.values(ZONINGS).map(z => {
             const active = st.zoning === z.id;
             return `
-              <button data-action="set-zoning" data-stid="${st.id}" data-zoning="${z.id}" class="py-1.5 px-1 rounded-lg text-[10px] font-bold border ${active ? 'bg-slate-800 text-white' : 'bg-slate-900 text-slate-400 border-slate-800'}" style="${active ? `border-color:${z.color};box-shadow:inset 0 0 0 1px ${z.color}` : ''}">
+              <button data-action="set-zoning" data-stid="${st.id}" data-zoning="${z.id}" class="py-1.5 md:py-2 px-1 rounded-lg text-[10px] md:text-xs font-bold border cursor-pointer ${active ? 'bg-slate-800 text-white' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'}" style="${active ? `border-color:${z.color};box-shadow:inset 0 0 0 1px ${z.color}` : ''}">
                 ${z.name}
               </button>`;
           }).join('')}
         </div>
-        <div class="text-[10px] text-slate-400 mt-1">${ZONINGS[st.zoning].desc}</div>
+        <div class="text-[10px] md:text-xs text-slate-300 mt-1.5">${ZONINGS[st.zoning].desc}</div>
       </div>
 
       <div>
-        <div class="flex items-center justify-between mb-1">
-          <div class="text-[10px] font-bold text-slate-400">大型ランドマーク（直接建設・1駅1施設）</div>
-          ${currentLm ? `<span class="text-[10px] font-bold text-emerald-400">建設済: ${currentLm.icon}${currentLm.name}</span>` : ''}
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="text-[10px] md:text-xs font-bold text-slate-400">大型ランドマーク（直接建設・1駅1施設）</div>
+          ${currentLm ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400">建設済: ${currentLm.icon}${currentLm.name}</span>` : ''}
         </div>
-        <div class="grid grid-cols-2 gap-1.5">
+        <div class="grid grid-cols-2 gap-1.5 md:gap-2.5">
           ${LANDMARKS.map(lm => {
             const builtHere = st.landmark === lm.id;
             return `
-              <button data-action="build-landmark" data-stid="${st.id}" data-lmid="${lm.id}" class="text-left p-2 rounded-xl border ${builtHere ? 'bg-emerald-950/60 border-emerald-500/70' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700'} transition">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold text-white">${lm.icon} ${lm.name}</span>
-                  <span class="text-[10px] font-extrabold text-amber-300">${lm.cost}億</span>
+              <button data-action="build-landmark" data-stid="${st.id}" data-lmid="${lm.id}" class="text-left p-2 md:p-3 rounded-xl border cursor-pointer ${builtHere ? 'bg-emerald-950/60 border-emerald-500/70' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700'} transition">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="text-xs md:text-sm font-bold text-white">${lm.icon} ${lm.name}</span>
+                  <span class="text-[10px] md:text-xs font-extrabold text-amber-300 shrink-0">${lm.cost}億</span>
                 </div>
-                <div class="text-[9.5px] text-slate-400 mt-0.5 leading-snug">${lm.desc}</div>
+                <div class="text-[9.5px] md:text-xs text-slate-300 mt-1 leading-snug">${lm.desc}</div>
               </button>`;
           }).join('')}
         </div>
@@ -1483,27 +1694,35 @@
 
   // --- タブ4: 経営・統計 ---
   function renderFinanceTab(container) {
+    if (state.myStations.length < 2) {
+      container.innerHTML = `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
+          2駅以上を開通させると、月次収支（運賃・特急・不動産）と沿線人口推移チャートが集計されます。
+        </div>`;
+      return;
+    }
+
     const f = state.finance;
     const totalRev = f.fareRev + f.expressRev + f.estateRev;
     const totalExp = f.trackCost + f.opCost + f.directCost + f.landmarkCost;
 
     container.innerHTML = `
-      <div class="grid grid-cols-3 gap-1.5 mb-2">
-        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2">
-          <div class="text-[10px] text-slate-400">月間収入</div>
-          <div class="text-xs font-extrabold text-sky-300 tabular-nums mt-0.5">+${totalRev.toFixed(1)}億</div>
+      <div class="grid grid-cols-3 gap-1.5 md:gap-2.5 mb-2.5">
+        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2 md:p-3">
+          <div class="text-[10px] md:text-xs text-slate-400">月間収入</div>
+          <div class="text-xs md:text-base font-extrabold text-sky-300 tabular-nums mt-0.5">+${totalRev.toFixed(1)}億</div>
         </div>
-        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2">
-          <div class="text-[10px] text-slate-400">月間支出</div>
-          <div class="text-xs font-extrabold text-rose-300 tabular-nums mt-0.5">-${totalExp.toFixed(1)}億</div>
+        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2 md:p-3">
+          <div class="text-[10px] md:text-xs text-slate-400">月間支出</div>
+          <div class="text-xs md:text-base font-extrabold text-rose-300 tabular-nums mt-0.5">-${totalExp.toFixed(1)}億</div>
         </div>
-        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2">
-          <div class="text-[10px] text-slate-400">月間純利益</div>
-          <div class="text-xs font-extrabold tabular-nums mt-0.5 ${f.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${f.netProfit >= 0 ? '+' : ''}${f.netProfit.toFixed(1)}億</div>
+        <div class="bg-slate-800/90 border border-slate-700 rounded-lg p-2 md:p-3">
+          <div class="text-[10px] md:text-xs text-slate-400">月間純利益</div>
+          <div class="text-xs md:text-base font-extrabold tabular-nums mt-0.5 ${f.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${f.netProfit >= 0 ? '+' : ''}${f.netProfit.toFixed(1)}億</div>
         </div>
       </div>
 
-      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 mb-2 text-[10px] grid grid-cols-2 gap-x-3 gap-y-1">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 md:p-3 mb-2.5 text-[10px] md:text-xs grid grid-cols-2 gap-x-4 gap-y-1.5">
         <div class="flex justify-between"><span class="text-slate-400">運賃収入</span><span class="font-bold text-slate-200">${f.fareRev.toFixed(1)}億</span></div>
         <div class="flex justify-between"><span class="text-slate-400">路線・駅維持</span><span class="font-bold text-slate-200">${f.trackCost.toFixed(1)}億</span></div>
         <div class="flex justify-between"><span class="text-slate-400">特急料金</span><span class="font-bold text-slate-200">${f.expressRev.toFixed(1)}億</span></div>
@@ -1512,17 +1731,17 @@
         <div class="flex justify-between"><span class="text-slate-400">直通・施設費</span><span class="font-bold text-slate-200">${(f.directCost + f.landmarkCost).toFixed(1)}億</span></div>
       </div>
 
-      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 mb-2">
-        <div class="text-[10px] font-bold text-slate-400 mb-1">沿線人口の推移（万人）</div>
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 md:p-3 mb-2.5">
+        <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">沿線人口の推移（万人）</div>
         <div class="relative h-20 md:h-32 w-full">
           <canvas id="pop-chart-canvas" class="w-full h-full"></canvas>
         </div>
       </div>
 
-      <div class="text-[10px] font-bold text-slate-400 mb-1">駅別パフォーマンス</div>
-      <div class="space-y-1">
+      <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">駅別パフォーマンス</div>
+      <div class="space-y-1.5">
         ${state.myStations.map(st => `
-          <div class="flex items-center justify-between bg-slate-800/60 rounded-lg px-2 py-1 text-[10.5px]">
+          <div class="flex items-center justify-between bg-slate-800/60 rounded-lg px-2.5 py-1.5 text-[10.5px] md:text-xs">
             <span class="font-bold text-white">${st.name}</span>
             <div class="flex items-center gap-2.5 tabular-nums">
               <span class="text-slate-300">${(st.ridership / 1000).toFixed(1)}千人/日</span>
@@ -1587,27 +1806,34 @@
     const targetLat = nearEx ? nearEx.lat : lat;
     const targetLng = nearEx ? nearEx.lng : lng;
 
-    if (state.myStations.some(s => haversineKm(s.lat, s.lng, targetLat, targetLng) < 0.7)) {
-      showToast('既存の自社駅に近すぎます（もう少し離れた地点を選択）');
-      playSfx('error');
-      return;
-    }
-
-    const first = state.myStations[0];
-    const last = state.myStations[state.myStations.length - 1];
-    const dFirst = haversineKm(first.lat, first.lng, targetLat, targetLng);
-    const dLast = haversineKm(last.lat, last.lng, targetLat, targetLng);
-    const attachToStart = dFirst < dLast;
-    const distKm = Math.min(dFirst, dLast);
-
-    if (distKm > 12.0) {
-      showToast('終端駅から遠すぎます（12km以内を選択）');
-      playSfx('error');
-      return;
-    }
-
     const muni = getNearestMunicipality(targetLat, targetLng);
-    const cost = Math.round(18 + distKm * 7.5 + muni.priceBase * 0.35);
+    let attachToStart = false;
+    let distKm = 0;
+
+    if (state.myStations.length > 0) {
+      if (state.myStations.some(s => haversineKm(s.lat, s.lng, targetLat, targetLng) < 0.7)) {
+        showToast('既存の自社駅に近すぎます（もう少し離れた地点を選択）');
+        playSfx('error');
+        return;
+      }
+      const first = state.myStations[0];
+      const last = state.myStations[state.myStations.length - 1];
+      const dFirst = haversineKm(first.lat, first.lng, targetLat, targetLng);
+      const dLast = haversineKm(last.lat, last.lng, targetLat, targetLng);
+      attachToStart = dFirst < dLast;
+      distKm = Math.min(dFirst, dLast);
+
+      if (distKm > 12.0) {
+        showToast('終端駅から遠すぎます（12km以内を選択）');
+        playSfx('error');
+        return;
+      }
+    }
+
+    const cost = state.myStations.length === 0
+      ? Math.round(20 + muni.priceBase * 0.35)
+      : Math.round(18 + distKm * 7.5 + muni.priceBase * 0.35);
+
     if (state.funds < cost) {
       showToast(`資金が不足しています（必要: ${cost}億円）`);
       playSfx('error');
@@ -1640,7 +1866,13 @@
     state.selectedPoint = { lat: targetLat, lng: targetLng, muni };
 
     playSfx('build');
-    showToast(`🚉 ${newName}駅を開業！（建設費 ${cost}億円）`);
+    if (state.myStations.length === 1) {
+      showToast(`🚉 始発駅「${newName}駅」を建設！（${cost}億円）次は2駅目を繋ごう`);
+    } else if (state.myStations.length === 2) {
+      showToast(`🎉 ${newName}駅が開業し路線開通！（${cost}億円）列車が走り始めます`);
+    } else {
+      showToast(`🚉 ${newName}駅を開業！（建設費 ${cost}億円）`);
+    }
     recalculateSimulation(false);
     rebuildTrainActors();
     syncMapGeoJSON();
@@ -1831,6 +2063,48 @@
   document.getElementById('btn-help').addEventListener('click', () => { helpModal.classList.remove('hidden'); playSfx('tap'); });
   document.getElementById('btn-close-help').addEventListener('click', () => { helpModal.classList.add('hidden'); });
   document.getElementById('btn-start-play').addEventListener('click', () => { helpModal.classList.add('hidden'); playSfx('tap'); });
+  document.getElementById('btn-show-tutorial').addEventListener('click', () => {
+    state.tutorialVisible = true;
+    state.tutorialSkippedDirect = false;
+    helpModal.classList.add('hidden');
+    playSfx('tap');
+    renderTutorial();
+  });
+
+  function switchTab(tabName) {
+    state.activeTab = tabName;
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabName);
+    });
+    if (tabName !== 'route') state.buildMode = null;
+    updateHUD();
+    renderPanel();
+  }
+
+  document.getElementById('tutorial-box').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tut-action]');
+    if (!btn) return;
+    const act = btn.dataset.tutAction;
+    playSfx('tap');
+    if (act === 'tut-close') {
+      state.tutorialVisible = false;
+      renderTutorial();
+    } else if (act === 'tut-start-extend') {
+      switchTab('route');
+      state.buildMode = 'extend';
+      updateHUD();
+      renderPanel();
+    } else if (act === 'tut-go-route') {
+      switchTab('route');
+    } else if (act === 'tut-go-service') {
+      switchTab('service');
+    } else if (act === 'tut-go-dev') {
+      switchTab('dev');
+    } else if (act === 'tut-skip-direct') {
+      state.tutorialSkippedDirect = true;
+      renderTutorial();
+    }
+  });
   document.getElementById('btn-cancel-mode').addEventListener('click', () => {
     state.buildMode = null;
     updateHUD();
@@ -1855,7 +2129,7 @@
   document.getElementById('btn-layer-speed').addEventListener('click', (e) => {
     state.showSpeedHeat = !state.showSpeedHeat;
     e.currentTarget.textContent = state.showSpeedHeat ? '速度' : '路線';
-    e.currentTarget.className = `w-8 h-8 rounded-lg bg-white/95 font-extrabold text-[9px] border border-slate-300 shadow active:scale-95 ${state.showSpeedHeat ? 'text-emerald-700' : 'text-sky-700'}`;
+    e.currentTarget.className = `w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/95 hover:bg-white font-extrabold text-[9px] md:text-xs border border-slate-300 shadow active:scale-95 cursor-pointer ${state.showSpeedHeat ? 'text-emerald-700' : 'text-sky-700'}`;
     syncMapGeoJSON();
     playSfx('tap');
   });
