@@ -77,6 +77,7 @@
     MUNICIPALITIES,
     EXISTING_STATIONS,
     EXISTING_LINES,
+    LOCAL_PLACES,
     STRUCTURES,
     ZONINGS,
     LANDMARKS
@@ -107,7 +108,7 @@
     return best;
   }
 
-  function getNearestExistingStation(lat, lng, maxKm = 0.85) {
+  function getNearestExistingStation(lat, lng, maxKm = 0.65) {
     let best = null;
     let bestDist = maxKm;
     for (const ex of EXISTING_STATIONS) {
@@ -118,6 +119,64 @@
       }
     }
     return best;
+  }
+
+  function getNearestLocalPlace(lat, lng, maxKm = 3.0) {
+    if (!LOCAL_PLACES || LOCAL_PLACES.length === 0) return null;
+    let best = null;
+    let bestDist = maxKm;
+    for (const lp of LOCAL_PLACES) {
+      const d = haversineKm(lat, lng, lp.lat, lp.lng);
+      if (d < bestDist) {
+        bestDist = d;
+        best = lp;
+      }
+    }
+    return best;
+  }
+
+  // 既存駅との物理距離に応じた乗り換え快適性・ペナルティ（分）
+  function getTransferInfo(distM) {
+    if (distM == null || !isFinite(distM)) {
+      return { penaltyMin: 12, label: '徒歩乗換', canDirect: false, grade: 'far' };
+    }
+    const penaltyMin = Math.max(2, Math.min(14, Math.round(1.5 + distM / 55)));
+    if (distM <= 120) return { penaltyMin, label: '直結級', canDirect: true, grade: 'best' };
+    if (distM <= 260) return { penaltyMin, label: '連絡快適', canDirect: true, grade: 'good' };
+    if (distM <= 380) return { penaltyMin, label: '徒歩連絡', canDirect: true, grade: 'ok' };
+    return { penaltyMin, label: '徒歩長め', canDirect: false, grade: 'far' };
+  }
+
+  // 実在の地域地名から重複しない駅名を決定
+  function pickStationName(lat, lng, nearEx, transferDistM, muni) {
+    const used = new Set(state.myStations.map(s => s.name));
+    if (nearEx && transferDistM != null && transferDistM <= 160) {
+      if (!used.has(nearEx.name)) return nearEx.name;
+      if (!used.has(`新${nearEx.name}`)) return `新${nearEx.name}`;
+    }
+    if (LOCAL_PLACES && LOCAL_PLACES.length > 0) {
+      const ranked = LOCAL_PLACES
+        .map(lp => ({ name: lp.name, d: haversineKm(lat, lng, lp.lat, lp.lng) }))
+        .filter(x => x.d <= 3.0)
+        .sort((a, b) => a.d - b.d);
+      for (const cand of ranked) {
+        if (cand.d <= 1.6 && !used.has(cand.name)) return cand.name;
+      }
+      if (ranked.length > 0) {
+        const base = ranked[0].name;
+        if (!used.has(base)) return base;
+        for (const suf of ['新', '公園', '台', '中央', '本町', '前']) {
+          const nm = suf === '新' ? `新${base}` : `${base}${suf}`;
+          if (!used.has(nm)) return nm;
+        }
+      }
+    }
+    const fallbackBase = (muni ? muni.name : '新線').replace(/[区市]/g, '');
+    for (const suf of ['中央', '本町', '公園', '台', '新町', '丘']) {
+      const nm = `${fallbackBase}${suf}`;
+      if (!used.has(nm)) return nm;
+    }
+    return `${fallbackBase}${state.myStations.length + 1}`;
   }
 
   // 局所平面メートル座標変換（基準緯度）
@@ -357,7 +416,7 @@
     month: 4,
     tickInMonth: 0,
     speed: 1,
-    funds: 500.0,
+    funds: 2000.0,
     activeTab: 'route',
     buildMode: 'track', // 'track' | 'station' | null
     selectedPoint: null, // { lat, lng, muni }
@@ -401,7 +460,7 @@
     initialCorridorPop: 0
   };
 
-  function createStationState({ id, name, lat, lng, hasPassing, existingId, zoning, routeKm }) {
+  function createStationState({ id, name, lat, lng, hasPassing, existingId, transferDistM, zoning, routeKm }) {
     const muni = getNearestMunicipality(lat, lng);
     const density = muni.pop / muni.area; // 人/km²
     // 駅勢圏（半径約1km ≈ 3.14km²）の実在人口ベース初期値
@@ -416,6 +475,7 @@
       muniName: muni.name,
       hasPassing: !!hasPassing,
       existingId: existingId || null,
+      transferDistM: transferDistM != null ? transferDistM : null,
       zoning: zoning || (muni.commBase > 58 ? 'commercial' : 'residential'),
       landmark: null,
       areaPop,
@@ -630,7 +690,8 @@
             bestRunMin = (distKm / 42) * 60 + 5;
           }
 
-          const transferPenalty = gw.ex.hub ? 0 : (canDirectHere ? 0 : 10);
+          const tInfo = getTransferInfo(gw.st.transferDistM);
+          const transferPenalty = gw.ex.hub ? 0 : (canDirectHere ? 0 : tInfo.penaltyMin);
           const totalMin = gw.ex.hubCost + bestRunMin + waitMin + transferPenalty;
           if (totalMin < bestHubTime) bestHubTime = totalMin;
         }
@@ -1242,34 +1303,9 @@
       }
     }
 
-    // 沿線開発3Dビル群＆大型ランドマーク（fill-extrusion）
+    // 大型ランドマークのみ3D表示（駅設置時の自動四角形配置は廃止）
     const bldgFeatures = [];
     state.myStations.forEach(st => {
-      const z = ZONINGS[st.zoning] || ZONINGS.residential;
-      const baseH = 22 + st.devLevel * 1.1 + (st.accessScore * 0.45);
-
-      // 駅前自動成長ビル（4ブロック）
-      const offsets = [
-        [110, 85, 42, 36, 1.0],
-        [-115, 75, 38, 38, 0.85],
-        [95, -95, 36, 40, 0.78],
-        [-105, -90, 40, 34, 0.72]
-      ];
-      offsets.forEach(([ox, oy, hw, hh, mult]) => {
-        bldgFeatures.push({
-          type: 'Feature',
-          properties: {
-            color: z.color,
-            height: Math.round(baseH * mult)
-          },
-          geometry: {
-            type: 'Polygon',
-            coordinates: makeBuildingPolygon(st.lng, st.lat, hw, hh, ox, oy)
-          }
-        });
-      });
-
-      // 大型ランドマーク（存在する場合、ひときわ高い象徴的3Dタワー）
       if (st.landmark) {
         const lm = LANDMARKS.find(l => l.id === st.landmark);
         if (lm) {
@@ -1281,7 +1317,7 @@
             },
             geometry: {
               type: 'Polygon',
-              coordinates: makeBuildingPolygon(st.lng, st.lat, 62, 62, 0, 145)
+              coordinates: makeBuildingPolygon(st.lng, st.lat, 55, 55, 0, 110)
             }
           });
         }
@@ -1400,7 +1436,7 @@
       if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
       if (mapWrap) mapWrap.classList.add('extend-cursor');
       if (state.trackNodes.length === 0) {
-        bannerText.textContent = '始点をクリック（既存駅付近で自動スナップ）';
+        bannerText.textContent = '始点をクリックして線路敷設を開始';
       } else {
         bannerText.textContent = '次の地点をクリックして曲線／直線を延伸（反対端クリックで延伸端切替）';
       }
@@ -1448,8 +1484,11 @@
     }
     if (state.selectedPoint) {
       const m = state.selectedPoint.muni;
-      const nearEx = getNearestExistingStation(state.selectedPoint.lat, state.selectedPoint.lng, 0.9);
-      titleEl.textContent = `${m.name}${nearEx ? `・${nearEx.name}駅付近` : ''}`;
+      const lp = getNearestLocalPlace(state.selectedPoint.lat, state.selectedPoint.lng, 2.0);
+      const nearEx = getNearestExistingStation(state.selectedPoint.lat, state.selectedPoint.lng, 0.65);
+      const placeStr = lp ? `・${lp.name}` : '';
+      const exStr = nearEx ? ` (${nearEx.name}駅 ${Math.round(haversineKm(state.selectedPoint.lat, state.selectedPoint.lng, nearEx.lat, nearEx.lng) * 1000)}m)` : '';
+      titleEl.textContent = `${m.name}${placeStr}${exStr}`;
       subEl.textContent = `自治体人口 ${m.pop.toLocaleString()}人 / 密度 ${Math.round(m.pop / m.area).toLocaleString()}人/km²`;
     }
   }
@@ -1578,7 +1617,7 @@
     const n = state.myStations.length;
     const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0];
     const passingOk = hasIntermediatePassingTrack();
-    const canDirectStations = state.myStations.filter(s => s.existingId);
+    const canDirectStations = state.myStations.filter(s => s.existingId && getTransferInfo(s.transferDistM).canDirect);
 
     if (n === 0) {
       const km = getLineLengthKm();
@@ -1628,7 +1667,7 @@
               <div class="flex items-center justify-between bg-slate-800/80 border ${active ? 'border-amber-400/70' : 'border-slate-700'} rounded-lg px-2.5 md:px-3 py-2">
                 <div class="min-w-0 pr-2">
                   <div class="text-xs md:text-sm font-bold text-white">${cs.name} ⇔ ${ex.lines[0]}</div>
-                  <div class="text-[10px] md:text-xs text-slate-400">${active ? `直通中 (線路使用料 ${ex.directFee}億/月・乗換0分)` : `協定費 ${ex.directCost}億 / 乗換ペナルティ-10分`}</div>
+                  <div class="text-[10px] md:text-xs text-slate-400">${active ? `直通中 (線路使用料 ${ex.directFee}億/月・乗換0分)` : `協定費 ${ex.directCost}億 / 距離${cs.transferDistM ?? '-'}mの乗換ペナルティを0分へ`}</div>
                 </div>
                 ${active
                   ? `<span class="text-[10px] md:text-xs font-bold px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">締結済</span>`
@@ -1662,7 +1701,7 @@
       <div class="bg-slate-800/90 border border-slate-700 rounded-xl p-2.5 md:p-3.5">
         <div class="flex items-center justify-between gap-2">
           <div>
-            <div class="text-xs md:text-sm font-bold text-sky-300">選択駅: ${st.name}駅</div>
+            <div class="text-xs md:text-sm font-bold text-sky-300">選択駅: ${st.name}駅${st.existingId ? (() => { const ex = EXISTING_STATIONS.find(e => e.id === st.existingId); const ti = getTransferInfo(st.transferDistM); return ex ? ` <span class="text-[10px] text-amber-300 font-normal">(${ex.name} ${st.transferDistM}m・${ti.label} ${ti.penaltyMin}分)</span>` : ''; })() : ''}</div>
             <div class="text-[10px] md:text-xs text-slate-300 mt-1">${n < 2 ? '開業準備中（2駅目を建設してください）' : `都心体感 <strong class="text-white">${st.hubTime}分</strong> ・乗降 ${(st.ridership / 1000).toFixed(1)}千人/日 ・混雑 ${st.congestion}%`}</div>
           </div>
           ${st.hasPassing
@@ -1984,9 +2023,11 @@
   }
 
   function buildCandidateTrackNode(lat, lng, fastPreview = false) {
-    const nearEx = getNearestExistingStation(lat, lng, 0.45);
-    const targetLat = nearEx ? nearEx.lat : lat;
-    const targetLng = nearEx ? nearEx.lng : lng;
+    // 既存駅への強制スナップは廃止し、クリック位置をそのまま採用
+    const targetLat = lat;
+    const targetLng = lng;
+    const nearEx = getNearestExistingStation(targetLat, targetLng, 0.50);
+    const nearExDistM = nearEx ? Math.round(haversineKm(targetLat, targetLng, nearEx.lat, nearEx.lng) * 1000) : null;
     const muni = getNearestMunicipality(targetLat, targetLng);
 
     if (state.trackNodes.length === 0) {
@@ -1994,6 +2035,7 @@
         valid: true,
         isFirst: true,
         nearEx,
+        nearExDistM,
         targetLat,
         targetLng,
         muni,
@@ -2028,6 +2070,7 @@
       isFirst: false,
       attachToStart: state.activeEnd === 'start',
       nearEx,
+      nearExDistM,
       targetLat,
       targetLng,
       muni,
@@ -2067,8 +2110,9 @@
       }
       if (box) {
         box.classList.remove('hidden');
-        const snapTxt = cand.nearEx ? `<span class="text-amber-300 font-bold">[接続可] ${cand.nearEx.name}駅付近</span> ・ ` : '';
-        box.innerHTML = `${snapTxt}${cand.muni.name}から線路敷設を開始（始点 0億円）`;
+        const lp = getNearestLocalPlace(cand.targetLat, cand.targetLng, 2.0);
+        const exTxt = cand.nearEx ? `<span class="text-amber-300 font-bold">${cand.nearEx.name}駅まで${cand.nearExDistM}m</span> ・ ` : '';
+        box.innerHTML = `${exTxt}${cand.muni.name}${lp ? `・${lp.name}` : ''}から線路敷設を開始（始点 0億円）`;
       }
       return;
     }
@@ -2099,7 +2143,7 @@
 
     if (box) {
       const tags = [];
-      if (cand.nearEx) tags.push(`<span class="text-amber-300 font-bold">${cand.nearEx.name}駅接続</span>`);
+      if (cand.nearEx) tags.push(`<span class="text-amber-300 font-bold">${cand.nearEx.name}駅 ${cand.nearExDistM}m</span>`);
       if (a.hasRiver) tags.push(`<span class="text-sky-300">河川渡河(+${a.riverCost}億)</span>`);
       if (a.levelCrossings > 0) tags.push(`<span class="text-rose-300 font-bold">幹線踏切x${a.levelCrossings}(減速)</span>`);
       else if (a.majorRoadCrossings > 0) tags.push(`<span class="text-emerald-300">幹線道路立体交差</span>`);
@@ -2262,11 +2306,14 @@
     if (!proj || proj.distKm > 0.65) {
       return { valid: false, reason: '引いた線路の上（近く）をクリックしてください' };
     }
-    if (state.myStations.some(s => haversineKm(s.lat, s.lng, proj.lat, proj.lng) < 0.6)) {
-      return { valid: false, reason: '既存の自社駅に近すぎます（600m以上離してください）' };
+    if (state.myStations.some(s => haversineKm(s.lat, s.lng, proj.lat, proj.lng) < 0.35)) {
+      return { valid: false, reason: '既存の自社駅に近すぎます（350m以上離してください）' };
     }
     const nearEx = getNearestExistingStation(proj.lat, proj.lng, 0.65);
+    const transferDistM = nearEx ? Math.round(haversineKm(proj.lat, proj.lng, nearEx.lat, nearEx.lng) * 1000) : null;
+    const transferInfo = nearEx ? getTransferInfo(transferDistM) : null;
     const muni = getNearestMunicipality(proj.lat, proj.lng);
+    const suggestedName = pickStationName(proj.lat, proj.lng, nearEx, transferDistM, muni);
     const cost = Math.round(16 + muni.priceBase * 0.25);
     return {
       valid: true,
@@ -2274,6 +2321,9 @@
       lng: proj.lng,
       routeKm: proj.routeKm,
       nearEx,
+      transferDistM,
+      transferInfo,
+      suggestedName,
       muni,
       cost
     };
@@ -2309,8 +2359,10 @@
     }
     if (box) {
       box.classList.remove('hidden');
-      const snapTxt = cand.nearEx ? `<span class="text-amber-300 font-bold">[接続可] ${cand.nearEx.name}駅</span> ・` : '';
-      box.innerHTML = `${snapTxt}${cand.muni.name}に新駅を設置 ・建設費 <strong class="${okFunds ? 'text-amber-300' : 'text-rose-400'}">${cand.cost}億円</strong>`;
+      const trTxt = cand.nearEx
+        ? `<span class="text-amber-300 font-bold">${cand.nearEx.name}駅 ${cand.transferDistM}m (${cand.transferInfo.label}・乗換${cand.transferInfo.penaltyMin}分${cand.transferInfo.canDirect ? '・直通可' : ''})</span> ・ `
+        : '';
+      box.innerHTML = `${trTxt}新駅「<strong>${cand.suggestedName}</strong>」を設置 (${cand.muni.name}) ・建設費 <strong class="${okFunds ? 'text-amber-300' : 'text-rose-400'}">${cand.cost}億円</strong>`;
     }
   }
 
@@ -2329,12 +2381,7 @@
 
     state.funds = Math.round((state.funds - cand.cost) * 10) / 10;
     const newId = 'st_' + (state.myStations.length + 1);
-    let newName = cand.nearEx
-      ? cand.nearEx.name
-      : `${cand.muni.name.replace(/[区市]/g, '')}${['北', '南', '東', '西', '中央', '台'][state.myStations.length % 6]}`;
-    if (state.myStations.some(s => s.name === newName)) {
-      newName = `${newName}新`;
-    }
+    const newName = cand.suggestedName || pickStationName(cand.lat, cand.lng, cand.nearEx, cand.transferDistM, cand.muni);
 
     const newStation = createStationState({
       id: newId,
@@ -2343,6 +2390,7 @@
       lng: cand.lng,
       hasPassing: false,
       existingId: cand.nearEx ? cand.nearEx.id : null,
+      transferDistM: cand.transferDistM,
       routeKm: cand.routeKm
     });
 
