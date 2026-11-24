@@ -212,7 +212,6 @@
     <header class="bg-slate-900/95 border-b border-slate-700/60 px-3 md:px-4 py-2 flex items-center justify-between gap-2 md:gap-4 shrink-0 z-30">
       <div class="flex items-center gap-2.5 md:gap-4 min-w-0">
         <div class="hidden md:flex items-center gap-2 pr-3 border-r border-slate-700/80 shrink-0">
-          <span class="text-base">🚃</span>
           <span class="text-base font-extrabold tracking-tight text-white">沿線デベロッパー</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">TOKYO WEST</span>
         </div>
@@ -231,7 +230,7 @@
         <button id="btn-speed-0" class="speed-btn px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="一時停止 (Space)">Ⅱ</button>
         <button id="btn-speed-1" class="speed-btn active px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="通常速度 (1)">1x</button>
         <button id="btn-speed-3" class="speed-btn px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="3倍速 (3)">3x</button>
-        <button id="btn-mute" class="ml-0.5 px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="効果音切替">🔊</button>
+        <button id="btn-mute" class="ml-0.5 px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="効果音切替">音ON</button>
         <button id="btn-help" class="px-2 md:px-3 py-1 md:py-1.5 rounded text-[11px] md:text-sm font-bold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 cursor-pointer" title="遊び方">?</button>
       </div>
     </header>
@@ -248,15 +247,16 @@
         <div class="flex items-center justify-between gap-2">
           <span id="mode-banner-text" class="text-sky-200 font-bold">マップをクリックして線路を引こう</span>
           <div class="flex items-center gap-1.5 shrink-0">
-            <button id="btn-undo-node" class="hidden bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40 px-2 py-0.5 rounded text-[11px] md:text-xs cursor-pointer">↩ 1手戻す</button>
+            <button id="btn-switch-end" class="hidden bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-600 px-2 py-0.5 rounded text-[11px] md:text-xs cursor-pointer" title="延伸する端を切替">延伸端: 終点側</button>
+            <button id="btn-undo-node" class="hidden bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40 px-2 py-0.5 rounded text-[11px] md:text-xs cursor-pointer" title="直前の操作を取り消し (Ctrl+Z)">戻す (Ctrl+Z)</button>
             <button id="btn-cancel-mode" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-0.5 rounded text-[11px] md:text-xs cursor-pointer">終了</button>
           </div>
         </div>
         <div id="struct-bar" class="flex items-center gap-1.5 flex-wrap">
           <span class="text-[10px] md:text-xs text-slate-400">構造:</span>
-          <button data-struct="surface" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">🛤️ 地上</button>
-          <button data-struct="elevated" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">🌉 高架</button>
-          <button data-struct="underground" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">🚇 地下</button>
+          <button data-struct="surface" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">地上</button>
+          <button data-struct="elevated" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">高架</button>
+          <button data-struct="underground" class="struct-pill px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-600 bg-slate-800 text-slate-200 cursor-pointer">地下</button>
         </div>
         <div id="align-preview-box" class="hidden text-[10px] md:text-xs bg-slate-950/80 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-slate-200 leading-snug"></div>
       </div>
@@ -292,21 +292,17 @@
 
       <!-- 4タブナビゲーション（モバイル: 下部 / PC: サイドバー上部） -->
       <nav id="panel-nav" class="grid grid-cols-4 bg-slate-950 shrink-0">
-        <button data-tab="route" class="tab-btn active py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
-          <span class="text-sm md:text-base leading-none">🚉</span>
-          <span class="text-[10px] md:text-xs font-bold">路線・駅</span>
+        <button data-tab="route" class="tab-btn active py-2.5 md:py-3 flex items-center justify-center text-slate-400 cursor-pointer">
+          <span class="text-xs md:text-sm font-bold">路線・駅</span>
         </button>
-        <button data-tab="service" class="tab-btn py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
-          <span class="text-sm md:text-base leading-none">🚄</span>
-          <span class="text-[10px] md:text-xs font-bold">種別・直通</span>
+        <button data-tab="service" class="tab-btn py-2.5 md:py-3 flex items-center justify-center text-slate-400 cursor-pointer">
+          <span class="text-xs md:text-sm font-bold">種別・直通</span>
         </button>
-        <button data-tab="dev" class="tab-btn py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
-          <span class="text-sm md:text-base leading-none">🏙️</span>
-          <span class="text-[10px] md:text-xs font-bold">沿線開発</span>
+        <button data-tab="dev" class="tab-btn py-2.5 md:py-3 flex items-center justify-center text-slate-400 cursor-pointer">
+          <span class="text-xs md:text-sm font-bold">沿線開発</span>
         </button>
-        <button data-tab="finance" class="tab-btn py-2 md:py-2.5 flex flex-col items-center justify-center gap-0.5 text-slate-400 cursor-pointer">
-          <span class="text-sm md:text-base leading-none">📊</span>
-          <span class="text-[10px] md:text-xs font-bold">経営・統計</span>
+        <button data-tab="finance" class="tab-btn py-2.5 md:py-3 flex items-center justify-center text-slate-400 cursor-pointer">
+          <span class="text-xs md:text-sm font-bold">経営・統計</span>
         </button>
       </nav>
     </section>
@@ -324,7 +320,7 @@
         </p>
         <ul class="text-xs md:text-sm text-slate-300 space-y-2 list-disc pl-4 mb-4">
           <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ホイール／ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。右ドラッグ（スマホは二本指）で回転・傾きも調整可能です。2D切替でさらに軽快に動作します。</li>
-          <li><strong class="text-white">線路先引き＆駅設置</strong>: 「🛤️ 線路を引く」で経由点を打ちながら自由な曲線線形と構造（地上／高架／地下）を決定し、「🚉 駅を設置」で線路上の好きな場所へ駅を配置します。</li>
+          <li><strong class="text-white">線路先引き＆駅設置</strong>: 「線路を引く」で接線連続の直線・円弧で線形と構造（地上／高架／地下）を敷設し、「駅を設置」で線路上の好きな場所へ駅を配置します。Ctrl+Zで取り消し可能です。</li>
           <li><strong class="text-white">種別・待避線</strong>: 急行や特急の停車駅をタップで設定。途中に<strong class="text-sky-300">2面4線（待避線）</strong>があると速達効果がフル発揮され、遠方の都心体感時間が大幅短縮します。</li>
           <li><strong class="text-white">沿線開発</strong>: 駅ごとの開発方針で周辺に3D開発ビルが自動成長し、大型ランドマークを直接建てて街の目玉を作れます。</li>
         </ul>
