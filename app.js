@@ -1366,18 +1366,18 @@
 
       const rotaryFeatures = [];
       state.rotaries.forEach(rot => {
-        const r = rot.radiusM || 38;
+        const r = rot.radiusM || 20;
         rotaryFeatures.push({
           type: 'Feature',
           properties: { id: rot.id, part: 'plaza' },
-          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r + 8, 28) }
+          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r + 4, 28) }
         });
         rotaryFeatures.push({
           type: 'Feature',
           properties: { id: rot.id, part: 'road' },
           geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r, 28) }
         });
-        const laneRing = makeCirclePolygon(rot.lng, rot.lat, r * 0.72, 28)[0];
+        const laneRing = makeCirclePolygon(rot.lng, rot.lat, r * 0.70, 28)[0];
         rotaryFeatures.push({
           type: 'Feature',
           properties: { id: rot.id, part: 'lane' },
@@ -1386,7 +1386,7 @@
         rotaryFeatures.push({
           type: 'Feature',
           properties: { id: rot.id, part: 'island' },
-          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r * 0.44, 24) }
+          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r * 0.42, 24) }
         });
       });
       if (map.getSource('custom-rotaries')) {
@@ -1506,7 +1506,7 @@
     document.getElementById('hud-date').textContent = `${state.year}年${state.month}月`;
     const fundsEl = document.getElementById('hud-funds');
     fundsEl.textContent = `${state.funds.toFixed(1)}億円`;
-    fundsEl.className = `text-xs md:text-lg font-extrabold tabular-nums shrink-0 ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    fundsEl.className = `text-sm md:text-lg font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
 
     const pop = getCorridorPop();
     const growthDiff = state.myStations.reduce((acc, st) => acc + (st.areaPop - st.initialPop), 0);
@@ -3122,7 +3122,7 @@
   document.getElementById('btn-center').addEventListener('click', () => {
     const sel = document.getElementById('area-select');
     const preset = (JAPAN_PRESETS || []).find(p => p.id === (sel && sel.value)) || { lat: 35.626, lng: 139.555, zoom: 12.2 };
-    if (map) map.easeTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? (IS_MOBILE ? 20 : 35) : 0, bearing: state.is25D ? (IS_MOBILE ? 0 : -14) : 0, duration: 450 });
+    if (map) map.easeTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0, duration: 450 });
     playSfx('tap');
   });
 
@@ -3132,7 +3132,7 @@
       const preset = (JAPAN_PRESETS || []).find(p => p.id === areaSelectEl.value);
       if (!preset || !map) return;
       playSfx('tap');
-      map.jumpTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? (IS_MOBILE ? 20 : 35) : 0, bearing: state.is25D ? (IS_MOBILE ? 0 : -14) : 0 });
+      map.jumpTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0 });
       if (preset.useBuiltin) {
         EXISTING_STATIONS = BUILTIN_STATIONS.slice();
         customExistingLinesGeoJSON = null;
