@@ -218,16 +218,15 @@
           <div class="flex items-center gap-1.5 flex-wrap">
             <span id="hud-date" class="text-xs md:text-base font-bold text-sky-300 tracking-wide">2026年4月</span>
             <select id="area-select" class="text-[10px] md:text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-600 cursor-pointer" title="日本全国エリア移動">
-              <option value="tokyo_west">東京西南部</option>
-              <option value="tokyo_core">東京・新宿</option>
-              <option value="yokohama">横浜・みなとみらい</option>
-              <option value="osaka">大阪・梅田</option>
-              <option value="nagoya">名古屋</option>
-              <option value="fukuoka">福岡・博多</option>
-              <option value="sapporo">札幌</option>
-              <option value="sendai">仙台</option>
+              <option value="tokyo_west">東京西南部（初期）</option>
+              <option value="kanto_all">関東全域（首都圏）</option>
+              <option value="kansai_all">関西全域（京阪神）</option>
+              <option value="chubu_all">中京圏（名古屋）</option>
+              <option value="fukuoka">北部九州（福岡）</option>
+              <option value="sapporo">札幌圏</option>
+              <option value="sendai">仙台圏</option>
             </select>
-            <button id="btn-load-osm-rail" class="text-[10px] md:text-xs px-2 py-0.5 rounded bg-sky-600/25 hover:bg-sky-600/40 text-sky-300 border border-sky-500/50 font-bold cursor-pointer" title="表示中エリアの全既存路線・駅をOpenStreetMapから読み込み">周辺路線を読込</button>
+            <button id="btn-load-osm-rail" class="text-[10px] md:text-xs px-2 py-0.5 rounded bg-sky-600/25 hover:bg-sky-600/40 text-sky-300 border border-sky-500/50 font-bold cursor-pointer" title="表示中エリア（最大約200km四方）の全駅を軽量一括読込">広域の駅を読込</button>
           </div>
           <div class="flex items-baseline gap-2 md:gap-4 mt-0.5 md:mt-0">
             <span id="hud-funds" class="text-sm md:text-lg font-extrabold text-emerald-400 tabular-nums">2000.0億円</span>
