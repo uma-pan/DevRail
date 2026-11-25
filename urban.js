@@ -47,7 +47,7 @@ window.RAIL_URBAN = (() => {
       if (distC >= rot.radiusM * 0.45 && distC <= rot.radiusM + maxSnapDistM) {
         const radial = Math.atan2(py, px);
         const tangent = radial + Math.PI / 2;
-        const targetR = rot.radiusM + halfD_m + 6;
+        const targetR = rot.radiusM + halfD_m + 4;
         const snapPt = fromLocalMeters(Math.cos(radial) * targetR, Math.sin(radial) * targetR, rot.lng, rot.lat);
         const cand = {
           aligned: true,
@@ -58,7 +58,7 @@ window.RAIL_URBAN = (() => {
           angleRad: tangent,
           roadSource: 'rotary',
           distM: ringDist,
-          roadHalfW: 8
+          roadHalfW: 4
         };
         if (!best || cand.distM < best.distM) best = cand;
       }
@@ -164,6 +164,7 @@ window.RAIL_URBAN = (() => {
     };
   }
 
+
   // =========================================================================
   // 8b. 土地区画整理・道路再編・駅前ロータリー・沿道施設配置
   // =========================================================================
@@ -173,7 +174,7 @@ window.RAIL_URBAN = (() => {
       const rot = state.rotaries[i];
       const [px, py] = toLocalMeters(lng, lat, rot.lng, rot.lat);
       const distC = Math.hypot(px, py);
-      if (Math.abs(distC - rot.radiusM) <= 26) {
+      if (Math.abs(distC - rot.radiusM) <= 18) {
         const a = Math.atan2(py, px);
         const pt = fromLocalMeters(Math.cos(a) * rot.radiusM, Math.sin(a) * rot.radiusM, rot.lng, rot.lat);
         best = { lng: pt[0], lat: pt[1], snapped: true, label: 'ロータリー接続' };
@@ -285,7 +286,7 @@ window.RAIL_URBAN = (() => {
       if (cand.rt.widthM > 0) {
         feats.push({
           type: 'Feature',
-          properties: { color: okFunds ? '#38bdf8' : '#f43f5e', width: cand.rt.id === 'avenue' ? 7 : 4.5 },
+          properties: { color: okFunds ? '#38bdf8' : '#f43f5e', width: cand.rt.id === 'avenue' ? 4.5 : 2.8 },
           geometry: { type: 'LineString', coordinates: cand.coords }
         });
       }
@@ -368,7 +369,7 @@ window.RAIL_URBAN = (() => {
       {
         type: 'Feature',
         properties: { color: '#22c55e', opacity: 0.65, stroke: '#16a34a' },
-        geometry: { type: 'Polygon', coordinates: makeCirclePolygon(lng, lat, rt.radiusM * 0.44, 20) }
+        geometry: { type: 'Polygon', coordinates: makeCirclePolygon(lng, lat, rt.radiusM * 0.42, 20) }
       }
     ];
     if (getMap() && isMapReady() && getMap().getSource('preview-dev')) {
@@ -397,13 +398,13 @@ window.RAIL_URBAN = (() => {
     const clearPoly = makeCirclePolygon(lng, lat, rt.clearRadiusM, 28);
 
     const approachRoadIds = [];
-    const nearRoad = findNearestRoadAlignment(lng, lat, 0, { queryRealRoads: true, maxSnapDistM: 135 });
+    const nearRoad = findNearestRoadAlignment(lng, lat, 0, { queryRealRoads: true, maxSnapDistM: 100 });
     if (nearRoad && nearRoad.aligned && nearRoad.roadSource !== 'rotary') {
       const [tx, ty] = toLocalMeters(nearRoad.roadPointLng, nearRoad.roadPointLat, lng, lat);
       const distT = Math.hypot(tx, ty);
-      if (distT > rt.radiusM + 8) {
+      if (distT > rt.radiusM + 4) {
         const ang = Math.atan2(ty, tx);
-        const startPt = fromLocalMeters(Math.cos(ang) * (rt.radiusM - 4), Math.sin(ang) * (rt.radiusM - 4), lng, lat);
+        const startPt = fromLocalMeters(Math.cos(ang) * (rt.radiusM - 2), Math.sin(ang) * (rt.radiusM - 2), lng, lat);
         const endPt = [nearRoad.roadPointLng, nearRoad.roadPointLat];
         const apCoords = [startPt, endPt];
         const apId = 'rd_ap_' + Date.now() + '_' + state.customRoads.length;
@@ -412,9 +413,9 @@ window.RAIL_URBAN = (() => {
           chainId: rotaryId,
           roadType: 'avenue',
           coords: apCoords,
-          widthM: 18,
-          clearHalfM: 26,
-          clearPolygon: makeBufferPolygonAroundPolyline(apCoords, 26),
+          widthM: ROAD_TYPES.avenue.widthM,
+          clearHalfM: ROAD_TYPES.avenue.clearHalfM,
+          clearPolygon: makeBufferPolygonAroundPolyline(apCoords, ROAD_TYPES.avenue.clearHalfM),
           lengthKm: distT / 1000,
           costPaid: 0
         });
@@ -477,19 +478,19 @@ window.RAIL_URBAN = (() => {
       });
       feats.push({
         type: 'Feature',
-        properties: { color: okFunds ? '#38bdf8' : '#f43f5e', width: 6 },
+        properties: { color: okFunds ? '#38bdf8' : '#f43f5e', width: 4.5 },
         geometry: { type: 'LineString', coordinates: g.mainRoad }
       });
       [g.crossRoad1, g.crossRoad2].forEach(cr => {
         feats.push({
           type: 'Feature',
-          properties: { color: okFunds ? '#94a3b8' : '#f43f5e', width: 3.5 },
+          properties: { color: okFunds ? '#94a3b8' : '#f43f5e', width: 2.5 },
           geometry: { type: 'LineString', coordinates: cr }
         });
       });
       if (box) {
         box.classList.remove('hidden');
-        box.innerHTML = `区画整理グリッド街区（185×145m・大通り＋直交街路を新設） ・費用 <strong class="${okFunds ? 'text-amber-300' : 'text-rose-400'}">${g.cost}億円</strong>`;
+        box.innerHTML = `区画整理グリッド街区（${REDEV_TOOLS.grid_block.widthM}×${REDEV_TOOLS.grid_block.heightM}m・大通り＋直交街路を新設） ・費用 <strong class="${okFunds ? 'text-amber-300' : 'text-rose-400'}">${g.cost}億円</strong>`;
       }
     } else {
       const tool = REDEV_TOOLS.clear_lot;
@@ -536,9 +537,9 @@ window.RAIL_URBAN = (() => {
         });
         roadIds.push(rid);
       };
-      addRd(g.mainRoad, 'avenue', 22);
-      addRd(g.crossRoad1, 'street', 12);
-      addRd(g.crossRoad2, 'street', 12);
+      addRd(g.mainRoad, 'avenue', ROAD_TYPES.avenue.widthM);
+      addRd(g.crossRoad1, 'street', ROAD_TYPES.street.widthM);
+      addRd(g.crossRoad2, 'street', ROAD_TYPES.street.widthM);
       state.undoStack.push({ type: 'redev', zoneId, roadIds, costPaid: g.cost });
       playSfx('build');
       showToast(`区画整理グリッド街区を整備しました（${g.cost}億円）。新設街路に沿って施設を建てられます`);
@@ -688,6 +689,7 @@ window.RAIL_URBAN = (() => {
     updateHUD();
     renderPanel();
   }
+
 
     return {
       isInsideRedevZone,
