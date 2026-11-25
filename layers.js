@@ -39,9 +39,10 @@ window.RAIL_LAYERS = (() => {
           'line-color': '#475569',
           'line-width': [
             'interpolate', ['exponential', 2], ['zoom'],
-            11, ['case', ['==', ['get', 'roadType'], 'avenue'], 3.2, 2.0],
-            14, ['case', ['==', ['get', 'roadType'], 'avenue'], 12, 7],
-            16, ['case', ['==', ['get', 'roadType'], 'avenue'], 32, 18]
+            11, ['case', ['==', ['get', 'roadType'], 'avenue'], 2.0, 1.3],
+            14, ['case', ['==', ['get', 'roadType'], 'avenue'], 5.2, 3.2],
+            16, ['case', ['==', ['get', 'roadType'], 'avenue'], 14.5, 8.5],
+            18, ['case', ['==', ['get', 'roadType'], 'avenue'], 48, 28]
           ]
         }
       });
@@ -54,9 +55,10 @@ window.RAIL_LAYERS = (() => {
           'line-color': ['case', ['==', ['get', 'roadType'], 'avenue'], '#f8fafc', '#ffffff'],
           'line-width': [
             'interpolate', ['exponential', 2], ['zoom'],
-            11, ['case', ['==', ['get', 'roadType'], 'avenue'], 2.2, 1.2],
-            14, ['case', ['==', ['get', 'roadType'], 'avenue'], 9.5, 5.2],
-            16, ['case', ['==', ['get', 'roadType'], 'avenue'], 27, 14.5]
+            11, ['case', ['==', ['get', 'roadType'], 'avenue'], 1.3, 0.8],
+            14, ['case', ['==', ['get', 'roadType'], 'avenue'], 3.8, 2.2],
+            16, ['case', ['==', ['get', 'roadType'], 'avenue'], 12.0, 6.8],
+            18, ['case', ['==', ['get', 'roadType'], 'avenue'], 42, 23]
           ]
         }
       });
@@ -68,7 +70,7 @@ window.RAIL_LAYERS = (() => {
         layout: { 'line-cap': 'butt', 'line-join': 'round' },
         paint: {
           'line-color': '#f59e0b',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.8, 15, 2.0],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.5, 16, 1.2, 18, 2.2],
           'line-dasharray': [2.5, 2.0],
           'line-opacity': 0.85
         }
@@ -104,7 +106,7 @@ window.RAIL_LAYERS = (() => {
         filter: ['==', ['get', 'part'], 'lane'],
         paint: {
           'line-color': '#f8fafc',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.0, 15, 2.2],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.6, 16, 1.3, 18, 2.2],
           'line-dasharray': [2.5, 2.0],
           'line-opacity': 0.9
         }
@@ -457,6 +459,7 @@ window.RAIL_LAYERS = (() => {
       });
     }
   }
+
 
   return { setupGameMapLayers };
 })();
