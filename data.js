@@ -156,13 +156,28 @@ window.RAIL_DATA = (() => {
   };
 
   const LANDMARKS = [
-    { id: 'dept', name: '駅直結商業ビル', tag: '商業', cost: 45, upkeep: 1.2, popAdd: 300, commAdd: 22, revAdd: 3.8, weekendBoost: 1.15, color: '#0ea5e9', desc: '商業魅力度と月間不動産収益を大きく底上げ' },
-    { id: 'tower', name: 'タワーマンション群', tag: '住宅', cost: 55, upkeep: 1.0, popAdd: 4800, commAdd: 8, revAdd: 3.2, weekendBoost: 1.0, color: '#f59e0b', desc: '駅勢圏の居住人口を即座に大幅増加' },
-    { id: 'univ', name: '私立大学キャンパス', tag: '大学', cost: 65, upkeep: 1.5, popAdd: 1800, commAdd: 26, revAdd: 2.5, weekendBoost: 1.1, color: '#a855f7', desc: '郊外でも安定した通学・下り需要を創出' },
-    { id: 'park', name: '大型テーマパーク', tag: '観光', cost: 90, upkeep: 2.4, popAdd: 500, commAdd: 38, revAdd: 5.5, weekendBoost: 1.55, color: '#f43f5e', desc: '休日の下り特急・急行需要を爆発的に増加' },
-    { id: 'outlet', name: 'アウトレットモール', tag: '買物', cost: 70, upkeep: 1.8, popAdd: 400, commAdd: 30, revAdd: 4.8, weekendBoost: 1.38, color: '#14b8a6', desc: '広域から買い物客を集め商業収益を拡大' },
-    { id: 'stadium', name: '多目的スタジアム', tag: '集客', cost: 85, upkeep: 2.0, popAdd: 600, commAdd: 34, revAdd: 4.6, weekendBoost: 1.45, color: '#f97316', desc: 'イベント時の爆発的な乗降客と話題性を獲得' }
+    { id: 'mid_retail',  name: '沿道商業モール',     tag: '沿道', cost: 22, upkeep: 0.6, popAdd: 180,  commAdd: 12, revAdd: 2.0, weekendBoost: 1.08, color: '#38bdf8', w: 54,  d: 26, h: 24,  shape: 'strip_mall',   desc: '道路沿いに並べやすい中規模商業施設。駅前通りの賑わい創出に最適' },
+    { id: 'mid_mansion', name: '分譲マンション街区', tag: '住居', cost: 24, upkeep: 0.4, popAdd: 2200, commAdd: 4,  revAdd: 1.5, weekendBoost: 1.0,  color: '#fbbf24', w: 58,  d: 24, h: 42,  shape: 'mansion_row',  desc: '街路に沿って整然と建つ中層マンション群。住宅需要を堅実に増加' },
+    { id: 'dept',        name: '駅直結商業ビル',     tag: '商業', cost: 45, upkeep: 1.2, popAdd: 300,  commAdd: 22, revAdd: 3.8, weekendBoost: 1.15, color: '#0ea5e9', w: 66,  d: 38, h: 78,  shape: 'podium_tower', desc: '低層商業＋高層棟。ロータリーや大通り沿いで商業収益を大きく底上げ' },
+    { id: 'tower',       name: 'タワーマンション群', tag: '住宅', cost: 55, upkeep: 1.0, popAdd: 4800, commAdd: 8,  revAdd: 3.2, weekendBoost: 1.0,  color: '#f59e0b', w: 76,  d: 34, h: 128, shape: 'twin_tower',   desc: '沿道ツインタワー。駅勢圏の居住人口を即座に大幅増加' },
+    { id: 'univ',        name: '私立大学キャンパス', tag: '大学', cost: 65, upkeep: 1.5, popAdd: 1800, commAdd: 26, revAdd: 2.5, weekendBoost: 1.1,  color: '#a855f7', w: 94,  d: 62, h: 36,  shape: 'campus',       desc: '中庭を囲む校舎群。郊外でも安定した通学・下り需要を創出' },
+    { id: 'outlet',      name: 'アウトレットモール', tag: '買物', cost: 70, upkeep: 1.8, popAdd: 400,  commAdd: 30, revAdd: 4.8, weekendBoost: 1.38, color: '#14b8a6', w: 104, d: 52, h: 22,  shape: 'outlet',       desc: '回遊型モール棟群。広域から買い物客を集め商業収益を拡大' },
+    { id: 'stadium',     name: '多目的スタジアム',   tag: '集客', cost: 85, upkeep: 2.0, popAdd: 600,  commAdd: 34, revAdd: 4.6, weekendBoost: 1.45, color: '#f97316', w: 106, d: 84, h: 52,  shape: 'stadium',      desc: '楕円アリーナ。イベント時の爆発的な乗降客と話題性を獲得' },
+    { id: 'park',        name: '大型テーマパーク',   tag: '観光', cost: 90, upkeep: 2.4, popAdd: 500,  commAdd: 38, revAdd: 5.5, weekendBoost: 1.55, color: '#f43f5e', w: 118, d: 88, h: 48,  shape: 'theme_park',   desc: 'ゲート棟とパビリオン群。休日の下り特急・急行需要を爆発的に増加' }
   ];
+
+  // 土地区画整理・道路再編タイプ
+  const ROAD_TYPES = {
+    avenue: { id: 'avenue', name: '駅前大通り(4車線)', widthM: 22, clearHalfM: 34, baseCost: 3.5, costPerKm: 8.5, color: '#64748b', desc: '既存路地を付け替えて広幅員の幹線道路を新設' },
+    street: { id: 'street', name: '区画街路(2車線)',   widthM: 12, clearHalfM: 22, baseCost: 1.8, costPerKm: 4.5, color: '#94a3b8', desc: '住宅・商業地向けの整形街路を敷設' },
+    erase:  { id: 'erase',  name: '既存道路の更地化',   widthM: 0,  clearHalfM: 36, baseCost: 1.5, costPerKm: 3.0, color: '#cbd5e1', desc: '道路を引かず既存道路・密集地を帯状に更地化' }
+  };
+
+  const REDEV_TOOLS = {
+    rotary:     { id: 'rotary',     name: '駅前ロータリー',       cost: 18, radiusM: 38, clearRadiusM: 86, desc: '交通広場＋周囲整地＋既存道路接続路を整備（駅アクセス改善・沿道配置可）' },
+    grid_block: { id: 'grid_block', name: '区画整理(グリッド街区)', cost: 28, widthM: 185, heightM: 145, desc: '既存道路を更地化し、大通り＋直交街路の整形街区を一括整備' },
+    clear_lot:  { id: 'clear_lot',  name: '区画更地化(道路消去)',  cost: 12, radiusM: 76, desc: '既存道路・建物を整地して更地化（自由に道路を引き直す下準備）' }
+  };
 
   // 東京西南部・川崎エリアの実在地名（町名・地域名・公園名）
   const LOCAL_PLACES = [
@@ -375,6 +390,8 @@ window.RAIL_DATA = (() => {
     OPERATOR_COLORS,
     STRUCTURES,
     ZONINGS,
-    LANDMARKS
+    LANDMARKS,
+    ROAD_TYPES,
+    REDEV_TOOLS
   };
 })();
