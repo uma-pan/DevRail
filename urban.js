@@ -352,6 +352,7 @@ window.RAIL_URBAN = (() => {
   function updateRotaryHoverPreview(lat, lng) {
     const box = document.getElementById('align-preview-box');
     const rt = REDEV_TOOLS.rotary;
+    state.hoverPreview = { valid: true, lat, lng, cost: rt.cost };
     const okFunds = state.funds >= rt.cost;
     const feats = [
       {
@@ -465,6 +466,7 @@ window.RAIL_URBAN = (() => {
   function updateRedevHoverPreview(lat, lng) {
     const box = document.getElementById('align-preview-box');
     const feats = [];
+    state.hoverPreview = { valid: true, lat, lng };
     if (state.redevTool === 'grid_block') {
       const g = getGridBlockPreviewData(lat, lng);
       const okFunds = state.funds >= g.cost;
