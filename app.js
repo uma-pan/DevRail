@@ -3,6 +3,8 @@
   // =========================================================================
   // 1. 効果音（Web Audio API）
   // =========================================================================
+  const IS_MOBILE = window.innerWidth < 900;
+  const IS_TOUCH = (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window && IS_MOBILE);
   let audioCtx = null;
   let isMuted = false;
 
@@ -386,6 +388,8 @@
     buildStructure: 'elevated',
     activeEnd: 'end',
     hoverPreview: null,
+    pendingTap: null, // タッチ環境での2ステップ確認用 { lat, lng, mode }
+    panelCollapsed: false,
     undoStack: [],
 
     // 沿線開発・土地区画整理・道路再編の状態
@@ -871,14 +875,14 @@
       container: 'map',
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: [139.555, 35.626],
-      zoom: window.innerWidth >= 900 ? 12.2 : 11.8,
-      pitch: 35,
-      bearing: -14,
+      zoom: IS_MOBILE ? 11.8 : 12.2,
+      pitch: IS_MOBILE ? 20 : 35,
+      bearing: IS_MOBILE ? 0 : -14,
       antialias: false,
       pixelRatio: 1,
       fadeDuration: 0,
-      maxTileCacheSize: 32,
-      maxPitch: 52
+      maxTileCacheSize: IS_MOBILE ? 16 : 32,
+      maxPitch: IS_MOBILE ? 45 : 52
     });
 
     let fallbackTriggered = false;
@@ -933,7 +937,7 @@
           if (l.type === 'fill-extrusion') {
             has3D = true;
             realBuildingLayerIds.push(lid);
-            map.setLayerZoomRange(lid, 15.2, 24);
+            map.setLayerZoomRange(lid, IS_MOBILE ? 16.0 : 15.2, 24);
             map.setPaintProperty(lid, 'fill-extrusion-color', '#e2e8f0');
             map.setPaintProperty(lid, 'fill-extrusion-opacity', 0.82);
           }
@@ -944,7 +948,7 @@
             type: 'fill-extrusion',
             source: 'openmaptiles',
             'source-layer': 'building',
-            minzoom: 15.2,
+            minzoom: IS_MOBILE ? 16.0 : 15.2,
             paint: {
               'fill-extrusion-color': '#e2e8f0',
               'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 12],
@@ -964,6 +968,7 @@
 
     let lastPreviewTs = 0;
     map.on('mousemove', (e) => {
+      if (IS_TOUCH) return;
       if (!state.buildMode) {
         if (state.hoverPreview) clearPreviewTrack();
         return;
@@ -972,36 +977,31 @@
       const now = performance.now();
       if (now - lastPreviewTs < 65) return;
       lastPreviewTs = now;
-      if (state.buildMode === 'track') {
-        updateTrackHoverPreview(e.lngLat.lat, e.lngLat.lng);
-      } else if (state.buildMode === 'station') {
-        updateStationHoverPreview(e.lngLat.lat, e.lngLat.lng);
-      } else if (state.buildMode === 'road') {
-        updateRoadHoverPreview(e.lngLat.lat, e.lngLat.lng);
-      } else if (state.buildMode === 'rotary') {
-        updateRotaryHoverPreview(e.lngLat.lat, e.lngLat.lng);
-      } else if (state.buildMode === 'redev') {
-        updateRedevHoverPreview(e.lngLat.lat, e.lngLat.lng);
-      } else if (state.buildMode === 'landmark') {
-        updateLandmarkHoverPreview(e.lngLat.lat, e.lngLat.lng);
-      }
+      showPreviewForCurrentMode(e.lngLat.lat, e.lngLat.lng);
     });
 
     map.on('click', (e) => {
+      if (map.isMoving()) return;
       const lat = e.lngLat.lat;
       const lng = e.lngLat.lng;
-      if (state.buildMode === 'track') {
-        tryAddTrackNode(lat, lng);
-      } else if (state.buildMode === 'station') {
-        tryPlaceStationOnTrack(lat, lng);
-      } else if (state.buildMode === 'road') {
-        tryAddRoadNode(lat, lng);
-      } else if (state.buildMode === 'rotary') {
-        tryPlaceRotary(lat, lng);
-      } else if (state.buildMode === 'redev') {
-        tryPlaceRedevBlock(lat, lng);
-      } else if (state.buildMode === 'landmark') {
-        tryPlaceDevelopment(lat, lng);
+      if (state.buildMode) {
+        if (IS_TOUCH) {
+          // タッチ環境: 1回目タップでプレビュー表示、同地点付近の再タップまたは「ここに確定」ボタンで建設（誤爆防止）
+          if (state.pendingTap && state.pendingTap.mode === state.buildMode && state.hoverPreview && state.hoverPreview.valid !== false) {
+            const p1 = map.project([state.pendingTap.lng, state.pendingTap.lat]);
+            const p2 = map.project([lng, lat]);
+            if (Math.hypot(p1.x - p2.x, p1.y - p2.y) <= 34) {
+              executePlacementForCurrentMode(state.pendingTap.lat, state.pendingTap.lng);
+              return;
+            }
+          }
+          state.pendingTap = { lat, lng, mode: state.buildMode };
+          showPreviewForCurrentMode(lat, lng);
+          syncTouchConfirmButton();
+          playSfx('tap');
+          return;
+        }
+        executePlacementForCurrentMode(lat, lng);
       } else {
         // 近い自社駅があればそれを選択
         let hitMy = null;
@@ -1506,7 +1506,7 @@
     document.getElementById('hud-date').textContent = `${state.year}年${state.month}月`;
     const fundsEl = document.getElementById('hud-funds');
     fundsEl.textContent = `${state.funds.toFixed(1)}億円`;
-    fundsEl.className = `text-sm md:text-lg font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    fundsEl.className = `text-xs md:text-lg font-extrabold tabular-nums shrink-0 ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
 
     const pop = getCorridorPop();
     const growthDiff = state.myStations.reduce((acc, st) => acc + (st.areaPop - st.initialPop), 0);
@@ -2188,6 +2188,33 @@
   // =========================================================================
   // 8. プレイヤー操作ハンドラ
   // =========================================================================
+  function syncTouchConfirmButton() {
+    const btn = document.getElementById('btn-confirm-place');
+    if (!btn) return;
+    const canConfirm = !!(IS_TOUCH && state.buildMode && state.pendingTap && state.pendingTap.mode === state.buildMode && state.hoverPreview && state.hoverPreview.valid !== false);
+    btn.classList.toggle('hidden', !canConfirm);
+  }
+
+  function showPreviewForCurrentMode(lat, lng) {
+    if (state.buildMode === 'track') updateTrackHoverPreview(lat, lng);
+    else if (state.buildMode === 'station') updateStationHoverPreview(lat, lng);
+    else if (state.buildMode === 'road') updateRoadHoverPreview(lat, lng);
+    else if (state.buildMode === 'rotary') updateRotaryHoverPreview(lat, lng);
+    else if (state.buildMode === 'redev') updateRedevHoverPreview(lat, lng);
+    else if (state.buildMode === 'landmark') updateLandmarkHoverPreview(lat, lng);
+  }
+
+  function executePlacementForCurrentMode(lat, lng) {
+    state.pendingTap = null;
+    syncTouchConfirmButton();
+    if (state.buildMode === 'track') tryAddTrackNode(lat, lng);
+    else if (state.buildMode === 'station') tryPlaceStationOnTrack(lat, lng);
+    else if (state.buildMode === 'road') tryAddRoadNode(lat, lng);
+    else if (state.buildMode === 'rotary') tryPlaceRotary(lat, lng);
+    else if (state.buildMode === 'redev') tryPlaceRedevBlock(lat, lng);
+    else if (state.buildMode === 'landmark') tryPlaceDevelopment(lat, lng);
+  }
+
   function clearPreviewTrack() {
     if (map && mapReady && map.getSource('preview-track')) {
       map.getSource('preview-track').setData({ type: 'FeatureCollection', features: [] });
@@ -2198,6 +2225,8 @@
     const box = document.getElementById('align-preview-box');
     if (box) box.classList.add('hidden');
     state.hoverPreview = null;
+    state.pendingTap = null;
+    syncTouchConfirmButton();
   }
 
   function getActiveAnchorAndTangent() {
@@ -2885,6 +2914,7 @@
   // タブ切り替え
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (state.panelCollapsed) setPanelCollapsed(false);
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.activeTab = btn.dataset.tab;
@@ -2896,15 +2926,62 @@
     });
   });
 
-  // 速度・ミュート・ヘルプ
+  // 速度・ミュート・ヘルプ（モバイル用コンパクトボタンも同期）
+  function syncSpeedButtons(sp) {
+    document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+    const pcBtn = document.getElementById(`btn-speed-${sp}`);
+    if (pcBtn) pcBtn.classList.add('active');
+    [0, 1, 3].forEach(v => {
+      const mBtn = document.getElementById(`btn-speed-${v}-m`);
+      if (!mBtn) return;
+      if (v === sp) {
+        mBtn.className = 'speed-btn-proxy active px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-600 text-white border border-sky-500 cursor-pointer';
+      } else {
+        mBtn.className = 'speed-btn-proxy px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer';
+      }
+    });
+  }
   [0, 1, 3].forEach(sp => {
-    document.getElementById(`btn-speed-${sp}`).addEventListener('click', () => {
-      state.speed = sp;
-      document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(`btn-speed-${sp}`).classList.add('active');
-      playSfx('tap');
+    const el = document.getElementById(`btn-speed-${sp}`);
+    if (el) {
+      el.addEventListener('click', () => {
+        state.speed = sp;
+        syncSpeedButtons(sp);
+        playSfx('tap');
+      });
+    }
+  });
+  document.querySelectorAll('[data-proxy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.proxy);
+      if (target) target.click();
     });
   });
+
+  // モバイル用パネル折りたたみトグル（地図を広く操作可能）
+  function setPanelCollapsed(collapsed) {
+    state.panelCollapsed = !!collapsed;
+    const panelEl = document.getElementById('panel-area');
+    const lbl = document.getElementById('panel-toggle-label');
+    if (panelEl) panelEl.classList.toggle('collapsed', state.panelCollapsed);
+    if (lbl) lbl.textContent = state.panelCollapsed ? 'パネルを開く' : 'パネルをたたんで地図を広く見る';
+    if (map) setTimeout(() => map.resize(), 60);
+  }
+  const panelToggleBtn = document.getElementById('btn-panel-toggle');
+  if (panelToggleBtn) {
+    panelToggleBtn.addEventListener('click', () => {
+      setPanelCollapsed(!state.panelCollapsed);
+      playSfx('tap');
+    });
+  }
+  const confirmPlaceBtn = document.getElementById('btn-confirm-place');
+  if (confirmPlaceBtn) {
+    confirmPlaceBtn.addEventListener('click', () => {
+      if (state.pendingTap && state.pendingTap.mode === state.buildMode) {
+        executePlacementForCurrentMode(state.pendingTap.lat, state.pendingTap.lng);
+      }
+    });
+  }
 
   document.getElementById('btn-mute').addEventListener('click', (e) => {
     isMuted = !isMuted;
@@ -3000,6 +3077,10 @@
         state.devRoadSnap = !state.devRoadSnap;
       }
       updateHUD();
+      if (state.pendingTap && state.pendingTap.mode === state.buildMode) {
+        showPreviewForCurrentMode(state.pendingTap.lat, state.pendingTap.lng);
+        syncTouchConfirmButton();
+      }
     });
   }
   document.querySelectorAll('.struct-pill').forEach(btn => {
@@ -3024,7 +3105,7 @@
     state.is25D = !state.is25D;
     e.currentTarget.textContent = state.is25D ? '2.5D' : '2D';
     if (map) {
-      map.easeTo({ pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0, duration: 350 });
+      map.easeTo({ pitch: state.is25D ? (IS_MOBILE ? 20 : 35) : 0, bearing: state.is25D ? (IS_MOBILE ? 0 : -14) : 0, duration: 350 });
       realBuildingLayerIds.forEach(lid => {
         try { map.setLayoutProperty(lid, 'visibility', state.is25D ? 'visible' : 'none'); } catch (_) {}
       });
@@ -3041,7 +3122,7 @@
   document.getElementById('btn-center').addEventListener('click', () => {
     const sel = document.getElementById('area-select');
     const preset = (JAPAN_PRESETS || []).find(p => p.id === (sel && sel.value)) || { lat: 35.626, lng: 139.555, zoom: 12.2 };
-    if (map) map.easeTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0, duration: 450 });
+    if (map) map.easeTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? (IS_MOBILE ? 20 : 35) : 0, bearing: state.is25D ? (IS_MOBILE ? 0 : -14) : 0, duration: 450 });
     playSfx('tap');
   });
 
@@ -3051,7 +3132,7 @@
       const preset = (JAPAN_PRESETS || []).find(p => p.id === areaSelectEl.value);
       if (!preset || !map) return;
       playSfx('tap');
-      map.jumpTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? 35 : 0, bearing: state.is25D ? -14 : 0 });
+      map.jumpTo({ center: [preset.lng, preset.lat], zoom: preset.zoom, pitch: state.is25D ? (IS_MOBILE ? 20 : 35) : 0, bearing: state.is25D ? (IS_MOBILE ? 0 : -14) : 0 });
       if (preset.useBuiltin) {
         EXISTING_STATIONS = BUILTIN_STATIONS.slice();
         customExistingLinesGeoJSON = null;
@@ -3094,7 +3175,7 @@
           if (tr.progress >= maxSeg) { tr.progress = maxSeg; tr.dir = -1; }
           else if (tr.progress <= 0) { tr.progress = 0; tr.dir = 1; }
         });
-        if (ts - lastTrainRenderTs >= 140) {
+        if (ts - lastTrainRenderTs >= (IS_MOBILE ? 220 : 140)) {
           lastTrainRenderTs = ts;
           updateTrainGeoJSON();
         }
