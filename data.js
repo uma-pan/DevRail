@@ -329,14 +329,13 @@ window.RAIL_DATA = (() => {
 
   // 日本全国エリアプリセット（任意地点へ移動して実在路線を動的読込可能）
   const JAPAN_PRESETS = [
-    { id: 'tokyo_west', name: '東京西南部', lat: 35.626, lng: 139.555, zoom: 12.2, useBuiltin: true },
-    { id: 'tokyo_core', name: '東京・新宿', lat: 35.6812, lng: 139.7350, zoom: 12.4 },
-    { id: 'yokohama',   name: '横浜・みなとみらい', lat: 35.4658, lng: 139.6225, zoom: 12.4 },
-    { id: 'osaka',      name: '大阪・梅田', lat: 34.7025, lng: 135.4959, zoom: 12.4 },
-    { id: 'nagoya',     name: '名古屋', lat: 35.1709, lng: 136.8815, zoom: 12.4 },
-    { id: 'fukuoka',    name: '福岡・博多', lat: 33.5902, lng: 130.4017, zoom: 12.4 },
-    { id: 'sapporo',    name: '札幌', lat: 43.0687, lng: 141.3508, zoom: 12.4 },
-    { id: 'sendai',     name: '仙台', lat: 38.2601, lng: 140.8824, zoom: 12.4 }
+    { id: 'tokyo_west', name: '東京西南部（軽量）', lat: 35.626, lng: 139.555, zoom: 12.2, useBuiltin: true },
+    { id: 'kanto_all',  name: '関東全域（首都圏一括）', lat: 35.6812, lng: 139.7671, zoom: 10.6, bbox: [35.12, 138.95, 36.38, 140.85] },
+    { id: 'kansai_all', name: '関西全域（京阪神一括）', lat: 34.7025, lng: 135.4959, zoom: 10.6, bbox: [34.25, 134.85, 35.18, 136.15] },
+    { id: 'chubu_all',  name: '中京圏（名古屋周辺）', lat: 35.1709, lng: 136.8815, zoom: 10.8, bbox: [34.65, 136.35, 35.60, 137.45] },
+    { id: 'fukuoka',    name: '北部九州（福岡・北九州）', lat: 33.5902, lng: 130.4017, zoom: 10.8, bbox: [33.20, 130.00, 33.98, 131.05] },
+    { id: 'sapporo',    name: '札幌圏', lat: 43.0687, lng: 141.3508, zoom: 11.2, bbox: [42.75, 140.85, 43.35, 141.80] },
+    { id: 'sendai',     name: '仙台圏', lat: 38.2601, lng: 140.8824, zoom: 11.2, bbox: [37.90, 140.50, 38.55, 141.35] }
   ];
 
   // 鉄道事業者・路線名キーワード別の標準カラー
