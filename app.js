@@ -82,8 +82,27 @@
     OPERATOR_COLORS,
     STRUCTURES,
     ZONINGS,
-    LANDMARKS
+    LANDMARKS,
+    ROAD_TYPES,
+    REDEV_TOOLS
   } = window.RAIL_DATA;
+
+  const {
+    haversineKm,
+    toLocalMeters,
+    fromLocalMeters,
+    calcRadiusMeters,
+    buildTangentArc,
+    speedLimitForRadius,
+    makeBuildingPolygon,
+    makeRotatedRect,
+    makeCirclePolygon,
+    makeEllipsePolygon,
+    makeBufferPolygonAroundPolyline,
+    isPointInRing,
+    projectPointToSegmentLocal,
+    buildDevelopmentFeatures
+  } = window.RAIL_GEO;
 
   // 動的差し替え可能な既存駅・既存路線データ（初期値は東京西南部、全国どこでもOSMから全路線読込可能）
   let EXISTING_STATIONS = BUILTIN_STATIONS.slice();
@@ -92,19 +111,11 @@
   let loadedOsmWayIds = new Set();
   let osmLoading = false;
   let cachedPlaceLabelLayers = [];
+  let cachedRoadLayers = [];
 
   // =========================================================================
   // 3. 地理計算ユーティリティ
   // =========================================================================
-  function haversineKm(lat1, lng1, lat2, lng2) {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
   function getNearestMunicipality(lat, lng) {
     let best = MUNICIPALITIES[0];
     let bestDist = Infinity;
@@ -253,115 +264,6 @@
   }
 
   // 局所平面メートル座標変換（基準緯度）
-  function toLocalMeters(lng, lat, refLng, refLat) {
-    const mLat = 111320;
-    const mLng = 111320 * Math.cos(refLat * Math.PI / 180);
-    return [(lng - refLng) * mLng, (lat - refLat) * mLat];
-  }
-
-  function fromLocalMeters(x, y, refLng, refLat) {
-    const mLat = 111320;
-    const mLng = 111320 * Math.cos(refLat * Math.PI / 180);
-    return [refLng + x / mLng, refLat + y / mLat];
-  }
-
-  // 3点を通る円の半径（Menger曲率半径・メートル）
-  function calcRadiusMeters(p0, p1, p2) {
-    const refLng = p1[0], refLat = p1[1];
-    const [x0, y0] = toLocalMeters(p0[0], p0[1], refLng, refLat);
-    const [x2, y2] = toLocalMeters(p2[0], p2[1], refLng, refLat);
-    const a = Math.hypot(x0, y0);
-    const b = Math.hypot(x2, y2);
-    const c = Math.hypot(x2 - x0, y2 - y0);
-    const area2 = Math.abs(x0 * y2 - y0 * x2); // 2 * triangle area
-    if (area2 < 1e-3 || a < 1 || b < 1 || c < 1) return 9999;
-    return (a * b * c) / (2 * area2);
-  }
-
-  // Train World方式：既存区間の接線に連続する定半径円弧／直線セグメントを生成（既存区間は一切変形しない）
-  function buildTangentArc(p0Lng, p0Lat, t0, p1Lng, p1Lat) {
-    const mLat = 111320;
-    const mLng = 111320 * Math.cos(p0Lat * Math.PI / 180);
-    const vx = (p1Lng - p0Lng) * mLng;
-    const vy = (p1Lat - p0Lat) * mLat;
-    const dist = Math.hypot(vx, vy);
-    if (dist < 1) return { invalid: true, reason: '同じ地点が選択されています' };
-    const ux = vx / dist, uy = vy / dist;
-    const SAMPLES = Math.max(4, Math.min(18, Math.ceil(dist / 90)));
-
-    if (!t0) {
-      const coords = [];
-      for (let i = 0; i <= SAMPLES; i++) {
-        const f = i / SAMPLES;
-        coords.push([p0Lng + (vx * f) / mLng, p0Lat + (vy * f) / mLat]);
-      }
-      return { coords, lengthKm: dist / 1000, minRadiusM: 2000, startDir: [ux, uy], endDir: [ux, uy] };
-    }
-
-    const tx = t0[0], ty = t0[1];
-    const dot = Math.max(-1, Math.min(1, tx * ux + ty * uy));
-    const cross = tx * uy - ty * ux;
-    const alpha = Math.atan2(cross, dot);
-    const absAlpha = Math.abs(alpha);
-
-    if (absAlpha > Math.PI * 0.62) {
-      return { invalid: true, reason: '折り返し角度が急すぎます（進行方向寄りに指定してください）' };
-    }
-    if (absAlpha < 0.04) {
-      const coords = [];
-      for (let i = 0; i <= SAMPLES; i++) {
-        const f = i / SAMPLES;
-        coords.push([p0Lng + (vx * f) / mLng, p0Lat + (vy * f) / mLat]);
-      }
-      return { coords, lengthKm: dist / 1000, minRadiusM: 2000, startDir: [ux, uy], endDir: [ux, uy] };
-    }
-
-    const sinA = Math.sin(absAlpha);
-    const R = dist / (2 * sinA);
-    if (R < 40) {
-      return { invalid: true, reason: `曲線半径が急すぎます（R${Math.round(R)}m / 最小R40m）` };
-    }
-
-    const sign = cross >= 0 ? 1 : -1;
-    const nx = -ty * sign;
-    const ny = tx * sign;
-    const cx = nx * R;
-    const cy = ny * R;
-    const startAngle = Math.atan2(-cy, -cx);
-    const sweep = 2 * absAlpha * sign;
-
-    const coords = [];
-    for (let i = 0; i <= SAMPLES; i++) {
-      const ang = startAngle + sweep * (i / SAMPLES);
-      const x = cx + Math.cos(ang) * R;
-      const y = cy + Math.sin(ang) * R;
-      coords.push([p0Lng + x / mLng, p0Lat + y / mLat]);
-    }
-    const endAngle = startAngle + sweep;
-    const ex = -Math.sin(endAngle) * sign;
-    const ey = Math.cos(endAngle) * sign;
-    const eLen = Math.hypot(ex, ey) || 1;
-
-    return {
-      coords,
-      lengthKm: (R * 2 * absAlpha) / 1000,
-      minRadiusM: Math.round(Math.min(2000, R)),
-      startDir: [tx, ty],
-      endDir: [ex / eLen, ey / eLen]
-    };
-  }
-
-  // 曲線半径に基づく現実的な鉄道制限速度（km/h）
-  function speedLimitForRadius(r) {
-    if (r >= 800) return 110;
-    if (r >= 500) return 90;
-    if (r >= 350) return 75;
-    if (r >= 240) return 60;
-    if (r >= 160) return 48;
-    return 36;
-  }
-
-  // 実在ベクトル地図（OpenFreeMap）上の道路・河川・建物を軽量サンプリング解析
   function analyzeAlignmentOnMap(coords, structure, muniPriceBase, fastPreview = false) {
     let lengthKm = 0;
     for (let i = 1; i < coords.length; i++) {
@@ -464,23 +366,6 @@
     };
   }
 
-  // 指定緯度経度の周囲に3D押し出しポリゴン（矩形）を作る
-  function makeBuildingPolygon(lng, lat, halfW_m, halfH_m, offsetLng_m = 0, offsetLat_m = 0) {
-    const mPerDegLat = 111320;
-    const mPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
-    const cLng = lng + offsetLng_m / mPerDegLng;
-    const cLat = lat + offsetLat_m / mPerDegLat;
-    const dLng = halfW_m / mPerDegLng;
-    const dLat = halfH_m / mPerDegLat;
-    return [[
-      [cLng - dLng, cLat - dLat],
-      [cLng + dLng, cLat - dLat],
-      [cLng + dLng, cLat + dLat],
-      [cLng - dLng, cLat + dLat],
-      [cLng - dLng, cLat - dLat]
-    ]];
-  }
-
   // =========================================================================
   // 4. ゲーム状態（State）
   // =========================================================================
@@ -491,7 +376,7 @@
     speed: 1,
     funds: 2000.0,
     activeTab: 'route',
-    buildMode: 'track', // 'track' | 'station' | null
+    buildMode: 'track', // 'track' | 'station' | 'road' | 'rotary' | 'redev' | 'landmark' | null
     selectedPoint: null, // { lat, lng, muni }
     selectedStationId: null,
     is25D: true,
@@ -502,6 +387,19 @@
     activeEnd: 'end',
     hoverPreview: null,
     undoStack: [],
+
+    // 沿線開発・土地区画整理・道路再編の状態
+    roadType: 'avenue', // 'avenue' | 'street' | 'erase'
+    activeRoadChainId: null,
+    activeRoadNodes: [], // 現在敷設中の道路チェーン制御点 [{ lng, lat }]
+    redevTool: 'grid_block', // 'grid_block' | 'clear_lot'
+    devAngleDeg: 0,
+    devRoadSnap: true,
+    selectedLandmarkId: 'mid_retail',
+    redevZones: [],   // [{ id, type, polygon, centerLng, centerLat, costPaid }]
+    customRoads: [],  // [{ id, chainId, roadType, coords, widthM, clearHalfM, clearPolygon, lengthKm, costPaid }]
+    rotaries: [],     // [{ id, lat, lng, radiusM, clearRadiusM, stationId, clearPolygon, approachRoadIds, costPaid }]
+    developments: [], // [{ id, landmarkId, stationId, lat, lng, angleRad, roadAligned, roadSource, costPaid }]
 
     trackNodes: [], // [{ id, lat, lng, costPaid }]
     myStations: [], // [{ ..., routeKm }] (線路上に設置した駅・routeKm昇順)
@@ -569,6 +467,12 @@
     state.activeEnd = 'end';
     state.undoStack = [];
     state.myStations = [];
+    state.activeRoadChainId = null;
+    state.activeRoadNodes = [];
+    state.redevZones = [];
+    state.customRoads = [];
+    state.rotaries = [];
+    state.developments = [];
     state.segments = [];
     state.routePolyline = [];
     state.directAgreements = {};
@@ -704,6 +608,40 @@
     let totalLandmarkUpkeep = 0;
     let totalWeekendAttr = 0;
 
+    // 駅ごとの沿道開発施設＆駅前ロータリー集計
+    const stationDevMap = {};
+    const stationRotaryMap = {};
+    state.myStations.forEach(st => {
+      stationDevMap[st.id] = { revAdd: 0, weekendBoost: 1.0, count: 0 };
+      stationRotaryMap[st.id] = false;
+    });
+    state.rotaries.forEach(rot => {
+      let bestSt = null, bestD = 0.30;
+      state.myStations.forEach(st => {
+        const d = haversineKm(st.lat, st.lng, rot.lat, rot.lng);
+        if (d < bestD) { bestD = d; bestSt = st; }
+      });
+      if (bestSt) stationRotaryMap[bestSt.id] = true;
+    });
+    state.developments.forEach(dev => {
+      const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
+      if (!lm) return;
+      totalLandmarkUpkeep += lm.upkeep;
+      const roadMult = dev.roadSource === 'rotary' ? 1.15 : (dev.roadAligned ? 1.0 : 0.80);
+      totalWeekendAttr += lm.commAdd * lm.weekendBoost * roadMult;
+      let bestSt = null, bestD = 1.25;
+      state.myStations.forEach(st => {
+        const d = haversineKm(st.lat, st.lng, dev.lat, dev.lng);
+        if (d < bestD) { bestD = d; bestSt = st; }
+      });
+      if (bestSt && stationDevMap[bestSt.id]) {
+        stationDevMap[bestSt.id].revAdd += lm.revAdd * roadMult;
+        stationDevMap[bestSt.id].weekendBoost = Math.max(stationDevMap[bestSt.id].weekendBoost, lm.weekendBoost);
+        stationDevMap[bestSt.id].count += 1;
+      } else {
+        totalEstateRev += lm.revAdd * roadMult * 0.55;
+      }
+    });
     state.myStations.forEach(st => {
       if (st.landmark) {
         const lm = LANDMARKS.find(l => l.id === st.landmark);
@@ -771,12 +709,16 @@
       }
 
       const lm = st.landmark ? LANDMARKS.find(l => l.id === st.landmark) : null;
-      const lmRev = lm ? lm.revAdd : 0;
-      const lmWeekend = lm ? lm.weekendBoost : 1.0;
+      const devAgg = stationDevMap[st.id] || { revAdd: 0, weekendBoost: 1.0, count: 0 };
+      const hasRotary = !!stationRotaryMap[st.id];
+      const lmRev = (lm ? lm.revAdd : 0) + devAgg.revAdd;
+      const lmWeekend = Math.max(lm ? lm.weekendBoost : 1.0, devAgg.weekendBoost);
+      if (hasRotary) bestHubTime = Math.max(6, bestHubTime - 2);
+      const effectiveComm = Math.min(100, st.comm + (hasRotary ? 8 : 0));
 
       const rawAccess = Math.max(5, Math.min(100, 108 - (bestHubTime - 12) * 1.45));
       const commutingDemand = st.areaPop * (rawAccess / 100) * 0.32;
-      const incomingDemand = (st.comm * 160) * (rawAccess / 100) * lmWeekend + (totalWeekendAttr * 18);
+      const incomingDemand = (effectiveComm * 160) * (rawAccess / 100) * lmWeekend + (totalWeekendAttr * 18);
       const serviceFactor = freqAtSt > 0 ? Math.min(1.25, 0.55 + freqAtSt * 0.05) : 0.05;
       const ridership = Math.round((commutingDemand + incomingDemand) * serviceFactor);
 
@@ -959,6 +901,7 @@
         const layers = (styleObj && styleObj.layers) || [];
         let has3D = false;
         cachedInfraLayers = [];
+        cachedRoadLayers = [];
         realBuildingLayerIds = [];
         cachedPlaceLabelLayers = [];
         layers.forEach(l => {
@@ -983,6 +926,9 @@
             !lid.includes('casing') && !lid.includes('outline') && !lid.includes('label')
           ) {
             cachedInfraLayers.push(lid);
+            if (sl === 'transportation' && l.type === 'line' && !lid.includes('rail') && !lid.includes('ferry') && !lid.includes('aeroway')) {
+              cachedRoadLayers.push(lid);
+            }
           }
           if (l.type === 'fill-extrusion') {
             has3D = true;
@@ -1030,6 +976,14 @@
         updateTrackHoverPreview(e.lngLat.lat, e.lngLat.lng);
       } else if (state.buildMode === 'station') {
         updateStationHoverPreview(e.lngLat.lat, e.lngLat.lng);
+      } else if (state.buildMode === 'road') {
+        updateRoadHoverPreview(e.lngLat.lat, e.lngLat.lng);
+      } else if (state.buildMode === 'rotary') {
+        updateRotaryHoverPreview(e.lngLat.lat, e.lngLat.lng);
+      } else if (state.buildMode === 'redev') {
+        updateRedevHoverPreview(e.lngLat.lat, e.lngLat.lng);
+      } else if (state.buildMode === 'landmark') {
+        updateLandmarkHoverPreview(e.lngLat.lat, e.lngLat.lng);
       }
     });
 
@@ -1040,6 +994,14 @@
         tryAddTrackNode(lat, lng);
       } else if (state.buildMode === 'station') {
         tryPlaceStationOnTrack(lat, lng);
+      } else if (state.buildMode === 'road') {
+        tryAddRoadNode(lat, lng);
+      } else if (state.buildMode === 'rotary') {
+        tryPlaceRotary(lat, lng);
+      } else if (state.buildMode === 'redev') {
+        tryPlaceRedevBlock(lat, lng);
+      } else if (state.buildMode === 'landmark') {
+        tryPlaceDevelopment(lat, lng);
       } else {
         // 近い自社駅があればそれを選択
         let hitMy = null;
@@ -1062,287 +1024,7 @@
     });
   }
 
-  function setupGameMapLayers() {
-    // 1a. 日本全国の全既存鉄道路線（OpenFreeMapベクトルタイル直描画：通信量0・超軽量60fps）
-    const styleObj = map.getStyle();
-    if (styleObj && styleObj.sources && styleObj.sources.openmaptiles && !map.getLayer('nationwide-rail-vector')) {
-      map.addLayer({
-        id: 'nationwide-rail-vector',
-        type: 'line',
-        source: 'openmaptiles',
-        'source-layer': 'transportation',
-        filter: ['==', ['get', 'class'], 'rail'],
-        paint: {
-          'line-color': [
-            'match', ['get', 'subclass'],
-            'subway', '#0284c7',
-            'light_rail', '#0d9488',
-            'monorail', '#7c3aed',
-            'tram', '#059669',
-            '#db2777'
-          ],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.1, 11, 2.0, 14, 3.4],
-          'line-opacity': 0.62
-        }
-      });
-    }
-
-    // 1b. 初期エリア用ハイライト路線（広域読込時はベクトルタイル一本化のため自動非表示）
-    if (!map.getSource('existing-lines')) {
-      map.addSource('existing-lines', { type: 'geojson', data: buildExistingLinesGeoJSON() });
-      map.addLayer({
-        id: 'existing-lines-layer',
-        type: 'line',
-        source: 'existing-lines',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 3.5],
-          'line-opacity': 0.45,
-          'line-dasharray': [2.5, 1.8]
-        }
-      });
-    }
-
-    // 2. 既存駅ドット（関東全域2,000駅超でも軽快に動くズーム連動表示）
-    if (!map.getSource('existing-stations')) {
-      map.addSource('existing-stations', { type: 'geojson', data: buildExistingStationsGeoJSON() });
-      map.addLayer({
-        id: 'existing-stations-circle',
-        type: 'circle',
-        source: 'existing-stations',
-        paint: {
-          'circle-radius': [
-            'interpolate', ['linear'], ['zoom'],
-            8, ['case', ['get', 'hub'], 4.2, ['get', 'major'], 2.4, 1.2],
-            12, ['case', ['get', 'hub'], 6.5, ['get', 'major'], 4.5, 2.8],
-            14, ['case', ['get', 'hub'], 7.5, ['get', 'major'], 5.5, 3.8]
-          ],
-          'circle-color': ['case', ['get', 'hub'], '#0f172a', '#ffffff'],
-          'circle-stroke-color': ['case', ['get', 'hub'], '#f59e0b', ['get', 'major'], '#334155', '#64748b'],
-          'circle-stroke-width': ['case', ['get', 'hub'], 2.2, ['get', 'major'], 1.6, 1.0]
-        }
-      });
-      map.addLayer({
-        id: 'existing-stations-label-hub',
-        type: 'symbol',
-        source: 'existing-stations',
-        minzoom: 8.5,
-        filter: ['==', ['get', 'hub'], true],
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 12,
-          'text-offset': [0, -1.1],
-          'text-anchor': 'bottom'
-        },
-        paint: {
-          'text-color': '#0f172a',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 2
-        }
-      });
-      map.addLayer({
-        id: 'existing-stations-label-major',
-        type: 'symbol',
-        source: 'existing-stations',
-        minzoom: 10.6,
-        filter: ['all', ['!=', ['get', 'hub'], true], ['==', ['get', 'major'], true]],
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 10.5,
-          'text-offset': [0, -1.0],
-          'text-anchor': 'bottom'
-        },
-        paint: {
-          'text-color': '#0f172a',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1.8
-        }
-      });
-      map.addLayer({
-        id: 'existing-stations-label-local',
-        type: 'symbol',
-        source: 'existing-stations',
-        minzoom: 12.5,
-        filter: ['all', ['!', ['get', 'hub']], ['!', ['get', 'major']]],
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 9.5,
-          'text-offset': [0, -0.85],
-          'text-anchor': 'bottom'
-        },
-        paint: {
-          'text-color': '#475569',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1.5
-        }
-      });
-    }
-
-    // 3. 駅勢圏インパクトサークル（Subway Builder風の赤い/青い駅エリア）
-    if (!map.getSource('station-zones')) {
-      map.addSource('station-zones', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({
-        id: 'station-zones-fill',
-        type: 'circle',
-        source: 'station-zones',
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 12, 14, 38],
-          'circle-color': ['get', 'color'],
-          'circle-opacity': 0.22,
-          'circle-stroke-color': ['get', 'color'],
-          'circle-stroke-width': 1.2,
-          'circle-stroke-opacity': 0.55
-        }
-      });
-    }
-
-    // 4. 自社開発による3D新規ビル群＆大型ランドマーク（fill-extrusion）
-    if (!map.getSource('dev-buildings')) {
-      map.addSource('dev-buildings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({
-        id: 'dev-buildings-3d',
-        type: 'fill-extrusion',
-        source: 'dev-buildings',
-        paint: {
-          'fill-extrusion-color': ['get', 'color'],
-          'fill-extrusion-height': ['get', 'height'],
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.92
-        }
-      });
-    }
-
-    // 5. 自社路線（地上・高架・地下の構造別ビジュアル＋曲線線形）
-    if (!map.getSource('my-track')) {
-      map.addSource('my-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      // 高架用の立体シャドウ
-      map.addLayer({
-        id: 'my-track-elevated-shadow',
-        type: 'line',
-        source: 'my-track',
-        filter: ['==', ['get', 'structure'], 'elevated'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': 'rgba(15, 23, 42, 0.35)',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 8, 14, 15],
-          'line-translate': [2, 4]
-        }
-      });
-      // 地上・高架ケーシング
-      map.addLayer({
-        id: 'my-track-casing',
-        type: 'line',
-        source: 'my-track',
-        filter: ['!=', ['get', 'structure'], 'underground'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': '#0f172a',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 10.5]
-        }
-      });
-      // 地上・高架本体
-      map.addLayer({
-        id: 'my-track-inner',
-        type: 'line',
-        source: 'my-track',
-        filter: ['!=', ['get', 'structure'], 'underground'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 6.4]
-        }
-      });
-      // 地下シールド線（破線＋半透明）
-      map.addLayer({
-        id: 'my-track-underground-casing',
-        type: 'line',
-        source: 'my-track',
-        filter: ['==', ['get', 'structure'], 'underground'],
-        layout: { 'line-cap': 'butt', 'line-join': 'round' },
-        paint: {
-          'line-color': '#0f172a',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5.5, 14, 9.5],
-          'line-opacity': 0.55,
-          'line-dasharray': [2.2, 1.4]
-        }
-      });
-      map.addLayer({
-        id: 'my-track-underground',
-        type: 'line',
-        source: 'my-track',
-        filter: ['==', ['get', 'structure'], 'underground'],
-        layout: { 'line-cap': 'butt', 'line-join': 'round' },
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.2, 14, 5.8],
-          'line-opacity': 0.85,
-          'line-dasharray': [2.2, 1.4]
-        }
-      });
-    }
-
-    // 5b. 線路制御点＆現在の延伸アンカー
-    if (!map.getSource('my-track-nodes')) {
-      map.addSource('my-track-nodes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({
-        id: 'my-track-nodes-circle',
-        type: 'circle',
-        source: 'my-track-nodes',
-        paint: {
-          'circle-radius': ['case', ['get', 'active'], 7.5, 4],
-          'circle-color': ['case', ['get', 'active'], '#ffffff', '#38bdf8'],
-          'circle-stroke-color': ['case', ['get', 'active'], '#0284c7', '#0f172a'],
-          'circle-stroke-width': ['case', ['get', 'active'], 3, 1.5]
-        }
-      });
-    }
-
-    // 5c. 延伸・駅設置リアルタイムプレビュー
-    if (!map.getSource('preview-track')) {
-      map.addSource('preview-track', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({
-        id: 'preview-track-line',
-        type: 'line',
-        source: 'preview-track',
-        filter: ['==', ['geometry-type'], 'LineString'],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 4, 14, 7],
-          'line-opacity': 0.85,
-          'line-dasharray': [1.8, 1.4]
-        }
-      });
-      map.addLayer({
-        id: 'preview-track-point',
-        type: 'circle',
-        source: 'preview-track',
-        filter: ['==', ['geometry-type'], 'Point'],
-        paint: {
-          'circle-radius': 8,
-          'circle-color': ['get', 'color'],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2.5
-        }
-      });
-    }
-
-    // 6. 走行中の自社列車（リアルタイムアニメーション）
-    if (!map.getSource('my-trains')) {
-      map.addSource('my-trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({
-        id: 'my-trains-circle',
-        type: 'circle',
-        source: 'my-trains',
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4.5, 14, 7.5],
-          'circle-color': ['get', 'color'],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2
-        }
-      });
-    }
-  }
+  function setupGameMapLayers() { window.RAIL_LAYERS.setupGameMapLayers(map, buildExistingLinesGeoJSON, buildExistingStationsGeoJSON); }
 
   function pickOperatorColor(name, operator) {
     const src = `${operator || ''} ${name || ''}`;
@@ -1637,28 +1319,109 @@
       }
     }
 
-    // 大型ランドマークのみ3D表示（駅設置時の自動四角形配置は廃止）
-    const bldgFeatures = [];
-    state.myStations.forEach(st => {
-      if (st.landmark) {
-        const lm = LANDMARKS.find(l => l.id === st.landmark);
-        if (lm) {
-          bldgFeatures.push({
+    // 区画整理・新設道路・駅前ロータリー・沿道開発3D建物群の同期
+    if (opts.dev !== false) {
+      const redevFeatures = [];
+      state.redevZones.forEach(z => {
+        if (z.polygon) {
+          redevFeatures.push({
             type: 'Feature',
-            properties: {
-              color: lm.color,
-              height: Math.round(115 + st.devLevel * 0.9)
-            },
-            geometry: {
-              type: 'Polygon',
-              coordinates: makeBuildingPolygon(st.lng, st.lat, 55, 55, 0, 110)
-            }
+            properties: { id: z.id, type: z.type },
+            geometry: { type: 'Polygon', coordinates: z.polygon }
           });
         }
+      });
+      state.customRoads.forEach(rd => {
+        if (rd.clearPolygon) {
+          redevFeatures.push({
+            type: 'Feature',
+            properties: { id: rd.id + '_clr', type: 'road_clear' },
+            geometry: { type: 'Polygon', coordinates: rd.clearPolygon }
+          });
+        }
+      });
+      state.rotaries.forEach(rot => {
+        if (rot.clearPolygon) {
+          redevFeatures.push({
+            type: 'Feature',
+            properties: { id: rot.id + '_clr', type: 'rotary_clear' },
+            geometry: { type: 'Polygon', coordinates: rot.clearPolygon }
+          });
+        }
+      });
+      if (map.getSource('redev-zones')) {
+        map.getSource('redev-zones').setData({ type: 'FeatureCollection', features: redevFeatures });
       }
-    });
-    if (map.getSource('dev-buildings')) {
-      map.getSource('dev-buildings').setData({ type: 'FeatureCollection', features: bldgFeatures });
+
+      const roadFeatures = state.customRoads
+        .filter(rd => rd.widthM > 0 && rd.coords && rd.coords.length >= 2)
+        .map(rd => ({
+          type: 'Feature',
+          properties: { id: rd.id, roadType: rd.roadType },
+          geometry: { type: 'LineString', coordinates: rd.coords }
+        }));
+      if (map.getSource('custom-roads')) {
+        map.getSource('custom-roads').setData({ type: 'FeatureCollection', features: roadFeatures });
+      }
+
+      const rotaryFeatures = [];
+      state.rotaries.forEach(rot => {
+        const r = rot.radiusM || 38;
+        rotaryFeatures.push({
+          type: 'Feature',
+          properties: { id: rot.id, part: 'plaza' },
+          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r + 8, 28) }
+        });
+        rotaryFeatures.push({
+          type: 'Feature',
+          properties: { id: rot.id, part: 'road' },
+          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r, 28) }
+        });
+        const laneRing = makeCirclePolygon(rot.lng, rot.lat, r * 0.72, 28)[0];
+        rotaryFeatures.push({
+          type: 'Feature',
+          properties: { id: rot.id, part: 'lane' },
+          geometry: { type: 'LineString', coordinates: laneRing }
+        });
+        rotaryFeatures.push({
+          type: 'Feature',
+          properties: { id: rot.id, part: 'island' },
+          geometry: { type: 'Polygon', coordinates: makeCirclePolygon(rot.lng, rot.lat, r * 0.44, 24) }
+        });
+      });
+      if (map.getSource('custom-rotaries')) {
+        map.getSource('custom-rotaries').setData({ type: 'FeatureCollection', features: rotaryFeatures });
+      }
+
+      const lotFeatures = [];
+      const bldgFeatures = [];
+      state.developments.forEach(dev => {
+        const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
+        if (!lm) return;
+        const st = dev.stationId ? state.myStations.find(s => s.id === dev.stationId) : null;
+        const built = buildDevelopmentFeatures(dev, lm, st ? st.devLevel : 0);
+        lotFeatures.push(built.lotFeature);
+        built.buildings.forEach(b => bldgFeatures.push(b));
+      });
+      // 旧互換（st.landmark）
+      state.myStations.forEach(st => {
+        if (st.landmark) {
+          const lm = LANDMARKS.find(l => l.id === st.landmark);
+          if (lm) {
+            bldgFeatures.push({
+              type: 'Feature',
+              properties: { color: lm.color, height: Math.round(115 + st.devLevel * 0.9) },
+              geometry: { type: 'Polygon', coordinates: makeBuildingPolygon(st.lng, st.lat, 55, 55, 0, 110) }
+            });
+          }
+        }
+      });
+      if (map.getSource('dev-lots')) {
+        map.getSource('dev-lots').setData({ type: 'FeatureCollection', features: lotFeatures });
+      }
+      if (map.getSource('dev-buildings')) {
+        map.getSource('dev-buildings').setData({ type: 'FeatureCollection', features: bldgFeatures });
+      }
     }
   }
 
@@ -1757,12 +1520,17 @@
     const banner = document.getElementById('mode-banner');
     const bannerText = document.getElementById('mode-banner-text');
     const structBar = document.getElementById('struct-bar');
+    const devModeBar = document.getElementById('dev-mode-bar');
     const undoBtn = document.getElementById('btn-undo-node');
+    const switchEndBtn = document.getElementById('btn-switch-end');
     const mapWrap = document.getElementById('map-wrapper');
+    if (devModeBar) {
+      devModeBar.classList.add('hidden');
+      devModeBar.innerHTML = '';
+    }
     if (state.buildMode === 'track') {
       banner.classList.remove('hidden');
       if (structBar) structBar.classList.remove('hidden');
-      const switchEndBtn = document.getElementById('btn-switch-end');
       if (switchEndBtn) {
         switchEndBtn.classList.toggle('hidden', state.trackNodes.length < 2);
         switchEndBtn.textContent = state.activeEnd === 'start' ? '延伸端: 始点側' : '延伸端: 終点側';
@@ -1777,11 +1545,68 @@
     } else if (state.buildMode === 'station') {
       banner.classList.remove('hidden');
       if (structBar) structBar.classList.add('hidden');
-      const switchEndBtn = document.getElementById('btn-switch-end');
       if (switchEndBtn) switchEndBtn.classList.add('hidden');
       if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
       if (mapWrap) mapWrap.classList.add('extend-cursor');
       bannerText.textContent = '線路上の好きな場所をクリックして駅を設置';
+    } else if (state.buildMode === 'road') {
+      banner.classList.remove('hidden');
+      if (structBar) structBar.classList.add('hidden');
+      if (switchEndBtn) switchEndBtn.classList.add('hidden');
+      if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
+      if (mapWrap) mapWrap.classList.add('extend-cursor');
+      bannerText.textContent = state.activeRoadNodes.length === 0
+        ? '道路の始点をクリック（既存道路を自動で付け替え・整地）'
+        : '次の地点をクリックして道路を延伸（Nキーで別の起点から開始）';
+      if (devModeBar) {
+        devModeBar.classList.remove('hidden');
+        devModeBar.innerHTML = `
+          <span class="text-[10px] md:text-xs text-slate-400">種別:</span>
+          ${Object.values(ROAD_TYPES).map(rt => `
+            <button data-dev-act="set-road-type" data-val="${rt.id}" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border cursor-pointer ${state.roadType === rt.id ? 'bg-sky-500 text-slate-950 border-sky-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'}">${rt.name}</button>
+          `).join('')}
+          ${state.activeRoadNodes.length > 0 ? `<button data-dev-act="new-road-chain" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-emerald-400/60 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 cursor-pointer">新しい起点 (N)</button>` : ''}
+        `;
+      }
+    } else if (state.buildMode === 'rotary') {
+      banner.classList.remove('hidden');
+      if (structBar) structBar.classList.add('hidden');
+      if (switchEndBtn) switchEndBtn.classList.add('hidden');
+      if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
+      if (mapWrap) mapWrap.classList.add('extend-cursor');
+      bannerText.textContent = '駅前など任意の地点をクリックして駅前ロータリーを整備（既存道路も自動接続）';
+    } else if (state.buildMode === 'redev') {
+      banner.classList.remove('hidden');
+      if (structBar) structBar.classList.add('hidden');
+      if (switchEndBtn) switchEndBtn.classList.add('hidden');
+      if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
+      if (mapWrap) mapWrap.classList.add('extend-cursor');
+      bannerText.textContent = state.redevTool === 'grid_block'
+        ? 'クリックで既存道路を更地化し整形グリッド街路を一括整備（Rキーで回転）'
+        : 'クリックで既存道路・密集地を更地化（自由に道路を引き直せます）';
+      if (devModeBar) {
+        devModeBar.classList.remove('hidden');
+        devModeBar.innerHTML = `
+          <button data-dev-act="set-redev-tool" data-val="grid_block" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border cursor-pointer ${state.redevTool === 'grid_block' ? 'bg-sky-500 text-slate-950 border-sky-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'}">グリッド街区(28億)</button>
+          <button data-dev-act="set-redev-tool" data-val="clear_lot" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border cursor-pointer ${state.redevTool === 'clear_lot' ? 'bg-sky-500 text-slate-950 border-sky-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'}">更地化のみ(12億)</button>
+          ${state.redevTool === 'grid_block' ? `<button data-dev-act="rotate-dev" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-500 bg-slate-800 hover:bg-slate-700 text-sky-300 cursor-pointer">回転 ${state.devAngleDeg}° (R)</button>` : ''}
+        `;
+      }
+    } else if (state.buildMode === 'landmark') {
+      banner.classList.remove('hidden');
+      if (structBar) structBar.classList.add('hidden');
+      if (switchEndBtn) switchEndBtn.classList.add('hidden');
+      if (undoBtn) undoBtn.classList.toggle('hidden', state.undoStack.length === 0);
+      if (mapWrap) mapWrap.classList.add('extend-cursor');
+      const lm = LANDMARKS.find(l => l.id === state.selectedLandmarkId) || LANDMARKS[0];
+      bannerText.textContent = `「${lm.name}」を実在道路・新設道路・ロータリー沿いにクリック配置`;
+      if (devModeBar) {
+        devModeBar.classList.remove('hidden');
+        devModeBar.innerHTML = `
+          <button data-dev-act="toggle-road-snap" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border cursor-pointer ${state.devRoadSnap ? 'bg-emerald-500 text-slate-950 border-emerald-300' : 'bg-slate-800 text-slate-300 border-slate-600'}">道路沿い自動整列: ${state.devRoadSnap ? 'ON' : 'OFF'}</button>
+          <button data-dev-act="rotate-dev" class="px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border border-slate-500 bg-slate-800 hover:bg-slate-700 text-sky-300 cursor-pointer">手動回転 ${state.devAngleDeg}° (R)</button>
+        `;
+      }
     } else {
       banner.classList.add('hidden');
       if (mapWrap) mapWrap.classList.remove('extend-cursor');
@@ -1834,7 +1659,7 @@
     const hasDirect = Object.keys(state.directAgreements).length > 0;
     const hasFastService = state.services.some(sv => sv.id !== 'local' && sv.enabled);
     const hasPassing = n >= 3 && hasIntermediatePassingTrack();
-    const hasLandmark = state.myStations.some(st => !!st.landmark);
+    const hasLandmark = state.myStations.some(st => !!st.landmark) || state.developments.length > 0;
 
     if (nodes < 2) {
       return {
@@ -2167,57 +1992,87 @@
     `;
   }
 
-  // --- タブ3: 沿線開発 ---
+  // --- タブ3: 沿線開発・土地区画整理 ---
   function renderDevTab(container) {
-    const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0];
-    if (!st) {
-      container.innerHTML = `
-        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
-          駅を建設すると、駅ごとの開発方針（ゾーニング）や大型ランドマークの建設ができるようになります。
-        </div>`;
-      return;
-    }
-    const currentLm = st.landmark ? LANDMARKS.find(l => l.id === st.landmark) : null;
+    const st = state.myStations.find(s => s.id === state.selectedStationId) || state.myStations[0] || null;
+    const isRoad = state.buildMode === 'road';
+    const isRotary = state.buildMode === 'rotary';
+    const isRedev = state.buildMode === 'redev';
+    const isLm = state.buildMode === 'landmark';
 
-    container.innerHTML = `
-      <div class="flex items-center justify-between gap-2 mb-2.5">
-        <div class="text-xs md:text-base font-extrabold text-white shrink-0">沿線開発: <span class="text-sky-300">${st.name}駅</span></div>
-        <div class="flex gap-1.5 overflow-x-auto max-w-[55%]">
-          ${state.myStations.map(s => `
-            <button data-action="select-station" data-stid="${s.id}" class="px-2 md:px-2.5 py-1 rounded text-[10px] md:text-xs font-bold shrink-0 cursor-pointer ${s.id === st.id ? 'bg-sky-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'}">${s.name}</button>
-          `).join('')}
+    const stationSection = st ? `
+      <div class="mb-3 pb-2.5 border-b border-slate-800">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="text-xs md:text-sm font-extrabold text-white shrink-0">対象駅: <span class="text-sky-300">${st.name}駅</span></div>
+          <div class="flex gap-1.5 overflow-x-auto max-w-[60%]">
+            ${state.myStations.map(s => `
+              <button data-action="select-station" data-stid="${s.id}" class="px-2 py-0.5 rounded text-[10px] md:text-xs font-bold shrink-0 cursor-pointer ${s.id === st.id ? 'bg-sky-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'}">${s.name}</button>
+            `).join('')}
+          </div>
         </div>
-      </div>
-
-      <div class="mb-3">
-        <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">一般市街地の開発方針（3D自動成長）</div>
-        <div class="grid grid-cols-4 gap-1.5 md:gap-2">
+        <div class="grid grid-cols-4 gap-1.5">
           ${Object.values(ZONINGS).map(z => {
             const active = st.zoning === z.id;
             return `
-              <button data-action="set-zoning" data-stid="${st.id}" data-zoning="${z.id}" class="py-1.5 md:py-2 px-1 rounded-lg text-[10px] md:text-xs font-bold border cursor-pointer ${active ? 'bg-slate-800 text-white' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'}" style="${active ? `border-color:${z.color};box-shadow:inset 0 0 0 1px ${z.color}` : ''}">
+              <button data-action="set-zoning" data-stid="${st.id}" data-zoning="${z.id}" class="py-1.5 px-1 rounded-lg text-[10px] md:text-xs font-bold border cursor-pointer ${active ? 'bg-slate-800 text-white' : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'}" style="${active ? `border-color:${z.color};box-shadow:inset 0 0 0 1px ${z.color}` : ''}">
                 ${z.name}
               </button>`;
           }).join('')}
         </div>
-        <div class="text-[10px] md:text-xs text-slate-300 mt-1.5">${ZONINGS[st.zoning].desc}</div>
+      </div>
+    ` : `
+      <div class="mb-3 bg-slate-800/60 border border-slate-700/80 rounded-xl px-3 py-2 text-[11px] md:text-xs text-slate-300 leading-relaxed">
+        駅建設前でも土地区画整理・道路再編・沿道開発を先行整備できます（駅を開業すると乗降客・収益に連動します）。
+      </div>
+    `;
+
+    container.innerHTML = `
+      ${stationSection}
+
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="text-[10px] md:text-xs font-bold text-slate-300">土地区画整理・道路再編（既存道路を作り変える）</div>
+          <span class="text-[10px] text-slate-400 tabular-nums">ロータリー ${state.rotaries.length} / 道路 ${state.customRoads.filter(r => r.widthM > 0).length}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5 md:gap-2">
+          <button data-action="mode-rotary" class="text-left p-2 rounded-xl border cursor-pointer transition ${isRotary ? 'bg-sky-600/30 border-sky-400 text-white' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'}">
+            <div class="text-[11px] md:text-xs font-extrabold">駅前ロータリー</div>
+            <div class="text-[10px] text-amber-300 font-bold mt-0.5">${REDEV_TOOLS.rotary.cost}億円</div>
+            <div class="text-[9.5px] text-slate-400 mt-0.5 leading-tight">交通広場＋道路接続</div>
+          </button>
+          <button data-action="mode-road" class="text-left p-2 rounded-xl border cursor-pointer transition ${isRoad ? 'bg-sky-600/30 border-sky-400 text-white' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'}">
+            <div class="text-[11px] md:text-xs font-extrabold">道路を引く・付替</div>
+            <div class="text-[10px] text-amber-300 font-bold mt-0.5">大通り/街路/消去</div>
+            <div class="text-[9.5px] text-slate-400 mt-0.5 leading-tight">既存道路を上書き再編</div>
+          </button>
+          <button data-action="mode-redev" class="text-left p-2 rounded-xl border cursor-pointer transition ${isRedev ? 'bg-sky-600/30 border-sky-400 text-white' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'}">
+            <div class="text-[11px] md:text-xs font-extrabold">区画整理スタンプ</div>
+            <div class="text-[10px] text-amber-300 font-bold mt-0.5">28億 / 12億</div>
+            <div class="text-[9.5px] text-slate-400 mt-0.5 leading-tight">グリッド街区・更地化</div>
+          </button>
+        </div>
       </div>
 
       <div>
         <div class="flex items-center justify-between mb-1.5">
-          <div class="text-[10px] md:text-xs font-bold text-slate-400">大型ランドマーク（直接建設・1駅1施設）</div>
-          ${currentLm ? `<span class="text-[10px] md:text-xs font-bold text-emerald-400">建設済: ${currentLm.name}</span>` : ''}
+          <div class="text-[10px] md:text-xs font-bold text-slate-300">沿道施設建設（実在道路・新設道路・ロータリーに自動整列）</div>
+          <span class="text-[10px] text-emerald-400 font-bold tabular-nums">配置済 ${state.developments.length}件</span>
         </div>
-        <div class="grid grid-cols-2 gap-1.5 md:gap-2.5">
+        <div class="grid grid-cols-2 gap-1.5 md:gap-2">
           ${LANDMARKS.map(lm => {
-            const builtHere = st.landmark === lm.id;
+            const active = isLm && state.selectedLandmarkId === lm.id;
+            const builtCount = state.developments.filter(d => d.landmarkId === lm.id).length;
             return `
-              <button data-action="build-landmark" data-stid="${st.id}" data-lmid="${lm.id}" class="text-left p-2 md:p-3 rounded-xl border cursor-pointer ${builtHere ? 'bg-emerald-950/60 border-emerald-500/70' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700'} transition">
+              <button data-action="select-landmark-build" data-lmid="${lm.id}" class="text-left p-2 md:p-2.5 rounded-xl border cursor-pointer transition ${active ? 'bg-sky-600/30 border-sky-400 shadow-inner' : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700'}">
                 <div class="flex items-center justify-between gap-1">
-                  <span class="text-xs md:text-sm font-bold text-white">${lm.name}</span>
+                  <span class="text-[11px] md:text-xs font-bold text-white truncate">${lm.name}</span>
                   <span class="text-[10px] md:text-xs font-extrabold text-amber-300 shrink-0">${lm.cost}億</span>
                 </div>
-                <div class="text-[9.5px] md:text-xs text-slate-300 mt-1 leading-snug">${lm.desc}</div>
+                <div class="text-[9.5px] md:text-[11px] text-slate-300 mt-1 leading-snug">${lm.desc}</div>
+                <div class="flex items-center justify-between mt-1 text-[9px] text-slate-400">
+                  <span>規模 ${lm.w}×${lm.d}m</span>
+                  ${builtCount > 0 ? `<span class="text-emerald-400 font-bold">×${builtCount}</span>` : ''}
+                </div>
               </button>`;
           }).join('')}
         </div>
@@ -2336,6 +2191,9 @@
   function clearPreviewTrack() {
     if (map && mapReady && map.getSource('preview-track')) {
       map.getSource('preview-track').setData({ type: 'FeatureCollection', features: [] });
+    }
+    if (map && mapReady && map.getSource('preview-dev')) {
+      map.getSource('preview-dev').setData({ type: 'FeatureCollection', features: [] });
     }
     const box = document.getElementById('align-preview-box');
     if (box) box.classList.add('hidden');
@@ -2622,6 +2480,59 @@
       rebuildRoutePolyline();
       playSfx('tap');
       showToast(`直前の線路敷設を取り消しました（+${last.costPaid}億円）`);
+    } else if (last.type === 'road') {
+      if (last.roadId) {
+        const rIdx = state.customRoads.findIndex(r => r.id === last.roadId);
+        if (rIdx >= 0) state.customRoads.splice(rIdx, 1);
+      }
+      if (last.wasFirstNode) {
+        state.activeRoadNodes = [];
+        state.activeRoadChainId = null;
+      } else if (state.activeRoadChainId === last.chainId && state.activeRoadNodes.length > 0) {
+        state.activeRoadNodes.pop();
+      }
+      state.funds = Math.round((state.funds + last.costPaid) * 10) / 10;
+      playSfx('tap');
+      showToast(`直前の道路敷設を取り消しました（+${last.costPaid}億円）`);
+    } else if (last.type === 'rotary') {
+      const idx = state.rotaries.findIndex(r => r.id === last.rotaryId);
+      if (idx >= 0) {
+        const rot = state.rotaries[idx];
+        state.rotaries.splice(idx, 1);
+        if (rot.approachRoadIds && rot.approachRoadIds.length > 0) {
+          state.customRoads = state.customRoads.filter(r => !rot.approachRoadIds.includes(r.id));
+        }
+      }
+      state.funds = Math.round((state.funds + last.costPaid) * 10) / 10;
+      playSfx('tap');
+      showToast(`直前の駅前ロータリーを取り消しました（+${last.costPaid}億円）`);
+    } else if (last.type === 'redev') {
+      if (last.zoneId) {
+        const zIdx = state.redevZones.findIndex(z => z.id === last.zoneId);
+        if (zIdx >= 0) state.redevZones.splice(zIdx, 1);
+      }
+      if (last.roadIds && last.roadIds.length > 0) {
+        state.customRoads = state.customRoads.filter(r => !last.roadIds.includes(r.id));
+      }
+      state.funds = Math.round((state.funds + last.costPaid) * 10) / 10;
+      playSfx('tap');
+      showToast(`直前の区画整理を取り消しました（+${last.costPaid}億円）`);
+    } else if (last.type === 'development') {
+      const dIdx = state.developments.findIndex(d => d.id === last.devId);
+      if (dIdx >= 0) {
+        const dev = state.developments[dIdx];
+        state.developments.splice(dIdx, 1);
+        const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
+        const st = dev.stationId ? state.myStations.find(s => s.id === dev.stationId) : null;
+        if (lm && st) {
+          st.areaPop = Math.max(3000, st.areaPop - (last.popAdded || 0));
+          st.comm = Math.max(12, st.comm - (last.commAdded || 0));
+          st.devLevel = Math.max(0, st.devLevel - 10);
+        }
+      }
+      state.funds = Math.round((state.funds + last.costPaid) * 10) / 10;
+      playSfx('tap');
+      showToast(`直前の施設建設を取り消しました（+${last.costPaid}億円）`);
     }
     clearPreviewTrack();
     recalculateSimulation(false);
@@ -2753,6 +2664,25 @@
     updateHUD();
     renderPanel();
   }
+
+  const urban = window.RAIL_URBAN.createUrbanController({
+    state,
+    getMap: () => map,
+    isMapReady: () => mapReady,
+    getCachedRoadLayers: () => cachedRoadLayers,
+    LANDMARKS, ROAD_TYPES, REDEV_TOOLS,
+    geo: window.RAIL_GEO,
+    playSfx, showToast, clearPreviewTrack,
+    recalculateSimulation, syncMapGeoJSON, syncStationMarkers,
+    updateHUD, renderPanel
+  });
+  const {
+    isInsideRedevZone, findNearestRoadAlignment,
+    updateRoadHoverPreview, tryAddRoadNode,
+    updateRotaryHoverPreview, tryPlaceRotary,
+    updateRedevHoverPreview, tryPlaceRedevBlock,
+    updateLandmarkHoverPreview, tryPlaceDevelopment
+  } = urban;
 
   document.getElementById('panel-content').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
@@ -2891,6 +2821,38 @@
       syncMapGeoJSON();
       updateHUD();
       renderPanel();
+    } else if (action === 'mode-road') {
+      state.buildMode = state.buildMode === 'road' ? null : 'road';
+      state.activeRoadChainId = null;
+      state.activeRoadNodes = [];
+      playSfx('tap');
+      clearPreviewTrack();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'mode-rotary') {
+      state.buildMode = state.buildMode === 'rotary' ? null : 'rotary';
+      playSfx('tap');
+      clearPreviewTrack();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'mode-redev') {
+      state.buildMode = state.buildMode === 'redev' ? null : 'redev';
+      playSfx('tap');
+      clearPreviewTrack();
+      updateHUD();
+      renderPanel();
+    } else if (action === 'select-landmark-build') {
+      const lmId = btn.dataset.lmid;
+      if (state.buildMode === 'landmark' && state.selectedLandmarkId === lmId) {
+        state.buildMode = null;
+      } else {
+        state.selectedLandmarkId = lmId;
+        state.buildMode = 'landmark';
+      }
+      playSfx('tap');
+      clearPreviewTrack();
+      updateHUD();
+      renderPanel();
     } else if (action === 'build-landmark') {
       const st = state.myStations.find(s => s.id === btn.dataset.stid);
       const lm = LANDMARKS.find(l => l.id === btn.dataset.lmid);
@@ -2926,7 +2888,8 @@
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.activeTab = btn.dataset.tab;
-      if (state.activeTab !== 'route') state.buildMode = null;
+      if (state.activeTab !== 'route' && (state.buildMode === 'track' || state.buildMode === 'station')) state.buildMode = null;
+      if (state.activeTab !== 'dev' && ['road', 'rotary', 'redev', 'landmark'].includes(state.buildMode)) state.buildMode = null;
       playSfx('tap');
       updateHUD();
       renderPanel();
@@ -2965,7 +2928,8 @@
     document.querySelectorAll('.tab-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === tabName);
     });
-    if (tabName !== 'route') state.buildMode = null;
+    if (tabName !== 'route' && (state.buildMode === 'track' || state.buildMode === 'station')) state.buildMode = null;
+    if (tabName !== 'dev' && ['road', 'rotary', 'redev', 'landmark'].includes(state.buildMode)) state.buildMode = null;
     updateHUD();
     renderPanel();
   }
@@ -3009,9 +2973,35 @@
   });
   document.getElementById('btn-cancel-mode').addEventListener('click', () => {
     state.buildMode = null;
+    state.activeRoadChainId = null;
+    state.activeRoadNodes = [];
     updateHUD();
     renderPanel();
   });
+  const devModeBarEl = document.getElementById('dev-mode-bar');
+  if (devModeBarEl) {
+    devModeBarEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-dev-act]');
+      if (!btn) return;
+      const act = btn.dataset.devAct;
+      playSfx('tap');
+      if (act === 'set-road-type') {
+        state.roadType = btn.dataset.val;
+      } else if (act === 'new-road-chain') {
+        state.activeRoadChainId = null;
+        state.activeRoadNodes = [];
+        clearPreviewTrack();
+        showToast('新しい道路の起点をクリックしてください');
+      } else if (act === 'set-redev-tool') {
+        state.redevTool = btn.dataset.val;
+      } else if (act === 'rotate-dev') {
+        state.devAngleDeg = (state.devAngleDeg + 15) % 360;
+      } else if (act === 'toggle-road-snap') {
+        state.devRoadSnap = !state.devRoadSnap;
+      }
+      updateHUD();
+    });
+  }
   document.querySelectorAll('.struct-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       state.buildStructure = btn.dataset.struct;
@@ -3117,7 +3107,7 @@
         if (state.month > 12) { state.month = 1; state.year += 1; }
         recalculateSimulation(true);
         recordHistory();
-        if (state.myStations.length > 0) syncMapGeoJSON({ tracks: false });
+        if (state.myStations.length > 0) syncMapGeoJSON({ tracks: false, dev: false });
         playSfx('month');
         updateHUD();
         if (state.activeTab === 'finance') renderPanel();
@@ -3165,6 +3155,17 @@
       document.getElementById('btn-speed-1').click();
     } else if (e.key === '3') {
       document.getElementById('btn-speed-3').click();
+    } else if (e.key.toLowerCase() === 'r' && (state.buildMode === 'landmark' || state.buildMode === 'redev')) {
+      state.devAngleDeg = (state.devAngleDeg + 15) % 360;
+      playSfx('tap');
+      updateHUD();
+    } else if (e.key.toLowerCase() === 'n' && state.buildMode === 'road') {
+      state.activeRoadChainId = null;
+      state.activeRoadNodes = [];
+      clearPreviewTrack();
+      playSfx('tap');
+      showToast('新しい道路の起点をクリックしてください');
+      updateHUD();
     }
   });
 
