@@ -168,15 +168,15 @@ window.RAIL_DATA = (() => {
 
   // 土地区画整理・道路再編タイプ
   const ROAD_TYPES = {
-    avenue: { id: 'avenue', name: '駅前大通り(4車線)', widthM: 22, clearHalfM: 34, baseCost: 3.5, costPerKm: 8.5, color: '#64748b', desc: '既存路地を付け替えて広幅員の幹線道路を新設' },
-    street: { id: 'street', name: '区画街路(2車線)',   widthM: 12, clearHalfM: 22, baseCost: 1.8, costPerKm: 4.5, color: '#94a3b8', desc: '住宅・商業地向けの整形街路を敷設' },
-    erase:  { id: 'erase',  name: '既存道路の更地化',   widthM: 0,  clearHalfM: 36, baseCost: 1.5, costPerKm: 3.0, color: '#cbd5e1', desc: '道路を引かず既存道路・密集地を帯状に更地化' }
+    avenue: { id: 'avenue', name: '駅前大通り(4車線)', widthM: 14, clearHalfM: 15, baseCost: 3.5, costPerKm: 8.5, color: '#64748b', desc: '既存路地を付け替えて広幅員の幹線道路を新設' },
+    street: { id: 'street', name: '区画街路(2車線)',   widthM: 8,  clearHalfM: 10, baseCost: 1.8, costPerKm: 4.5, color: '#94a3b8', desc: '住宅・商業地向けの整形街路を敷設' },
+    erase:  { id: 'erase',  name: '既存道路の更地化',   widthM: 0,  clearHalfM: 20, baseCost: 1.5, costPerKm: 3.0, color: '#cbd5e1', desc: '道路を引かず既存道路・密集地を帯状に更地化' }
   };
 
   const REDEV_TOOLS = {
-    rotary:     { id: 'rotary',     name: '駅前ロータリー',       cost: 18, radiusM: 38, clearRadiusM: 86, desc: '交通広場＋周囲整地＋既存道路接続路を整備（駅アクセス改善・沿道配置可）' },
-    grid_block: { id: 'grid_block', name: '区画整理(グリッド街区)', cost: 28, widthM: 185, heightM: 145, desc: '既存道路を更地化し、大通り＋直交街路の整形街区を一括整備' },
-    clear_lot:  { id: 'clear_lot',  name: '区画更地化(道路消去)',  cost: 12, radiusM: 76, desc: '既存道路・建物を整地して更地化（自由に道路を引き直す下準備）' }
+    rotary:     { id: 'rotary',     name: '駅前ロータリー',       cost: 18, radiusM: 20, clearRadiusM: 38, desc: '交通広場＋周囲整地＋既存道路接続路を整備（駅アクセス改善・沿道配置可）' },
+    grid_block: { id: 'grid_block', name: '区画整理(グリッド街区)', cost: 28, widthM: 125, heightM: 95,  desc: '既存道路を更地化し、大通り＋直交街路の整形街区を一括整備' },
+    clear_lot:  { id: 'clear_lot',  name: '区画更地化(道路消去)',  cost: 12, radiusM: 45, desc: '既存道路・建物を整地して更地化（自由に道路を引き直す下準備）' }
   };
 
   // 東京西南部・川崎エリアの実在地名（町名・地域名・公園名）
