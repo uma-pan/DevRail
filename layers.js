@@ -178,7 +178,27 @@ window.RAIL_LAYERS = (() => {
       });
     }
 
-    // 2. 既存駅ドット（関東全域2,000駅超でも軽快に動くズーム連動表示）
+    // 1c. 日本全国の全既存駅（OpenFreeMapベクトルタイル直描画：通信量0・ズーム12以上で即時表示＆自動取込ソース）
+    const isMob = typeof window !== 'undefined' && window.innerWidth < 900;
+    if (styleObj && styleObj.sources && styleObj.sources.openmaptiles && !map.getLayer('nationwide-stations-vector')) {
+      map.addLayer({
+        id: 'nationwide-stations-vector',
+        type: 'circle',
+        source: 'openmaptiles',
+        'source-layer': 'poi',
+        minzoom: 12,
+        filter: ['all', ['==', ['get', 'class'], 'railway'], ['in', ['get', 'subclass'], ['literal', ['station', 'subway', 'halt']]]],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.4, 14, 3.8],
+          'circle-color': '#ffffff',
+          'circle-stroke-color': '#475569',
+          'circle-stroke-width': 1.1,
+          'circle-opacity': 0.85
+        }
+      });
+    }
+
+    // 2. 既存駅ドット（関東全域2,000駅超でもスマホで軽快に動くズーム連動表示）
     if (!map.getSource('existing-stations')) {
       map.addSource('existing-stations', { type: 'geojson', data: buildExistingStationsGeoJSON() });
       map.addLayer({
@@ -188,13 +208,14 @@ window.RAIL_LAYERS = (() => {
         paint: {
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            8, ['case', ['get', 'hub'], 4.2, ['get', 'major'], 2.4, 1.2],
-            12, ['case', ['get', 'hub'], 6.5, ['get', 'major'], 4.5, 2.8],
+            8, ['case', ['get', 'hub'], 4.2, ['get', 'major'], 2.2, 0],
+            11.2, ['case', ['get', 'hub'], 5.8, ['get', 'major'], 3.8, isMob ? 0 : 1.8],
+            12.2, ['case', ['get', 'hub'], 6.5, ['get', 'major'], 4.5, 2.6],
             14, ['case', ['get', 'hub'], 7.5, ['get', 'major'], 5.5, 3.8]
           ],
           'circle-color': ['case', ['get', 'hub'], '#0f172a', '#ffffff'],
           'circle-stroke-color': ['case', ['get', 'hub'], '#f59e0b', ['get', 'major'], '#334155', '#64748b'],
-          'circle-stroke-width': ['case', ['get', 'hub'], 2.2, ['get', 'major'], 1.6, 1.0]
+          'circle-stroke-width': ['case', ['get', 'hub'], 2.2, ['get', 'major'], 1.5, 1.0]
         }
       });
       map.addLayer({
@@ -205,9 +226,10 @@ window.RAIL_LAYERS = (() => {
         filter: ['==', ['get', 'hub'], true],
         layout: {
           'text-field': ['get', 'name'],
-          'text-size': 12,
+          'text-size': isMob ? 11 : 12,
           'text-offset': [0, -1.1],
-          'text-anchor': 'bottom'
+          'text-anchor': 'bottom',
+          'text-padding': 4
         },
         paint: {
           'text-color': '#0f172a',
@@ -219,13 +241,14 @@ window.RAIL_LAYERS = (() => {
         id: 'existing-stations-label-major',
         type: 'symbol',
         source: 'existing-stations',
-        minzoom: 10.6,
+        minzoom: isMob ? 11.4 : 10.6,
         filter: ['all', ['!=', ['get', 'hub'], true], ['==', ['get', 'major'], true]],
         layout: {
           'text-field': ['get', 'name'],
-          'text-size': 10.5,
+          'text-size': isMob ? 10 : 10.5,
           'text-offset': [0, -1.0],
-          'text-anchor': 'bottom'
+          'text-anchor': 'bottom',
+          'text-padding': 4
         },
         paint: {
           'text-color': '#0f172a',
@@ -237,13 +260,14 @@ window.RAIL_LAYERS = (() => {
         id: 'existing-stations-label-local',
         type: 'symbol',
         source: 'existing-stations',
-        minzoom: 12.5,
+        minzoom: isMob ? 13.2 : 12.5,
         filter: ['all', ['!', ['get', 'hub']], ['!', ['get', 'major']]],
         layout: {
           'text-field': ['get', 'name'],
           'text-size': 9.5,
           'text-offset': [0, -0.85],
-          'text-anchor': 'bottom'
+          'text-anchor': 'bottom',
+          'text-padding': 4
         },
         paint: {
           'text-color': '#475569',
