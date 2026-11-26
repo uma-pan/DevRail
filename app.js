@@ -964,6 +964,14 @@
       mapReady = true;
       syncMapGeoJSON();
       syncStationMarkers();
+      setTimeout(syncStationsFromVectorTiles, 350);
+    });
+
+    let vtSyncTimer = null;
+    map.on('idle', () => {
+      if (!mapReady || map.getZoom() < 12) return;
+      if (vtSyncTimer) clearTimeout(vtSyncTimer);
+      vtSyncTimer = setTimeout(syncStationsFromVectorTiles, 280);
     });
 
     let lastPreviewTs = 0;
@@ -1227,51 +1235,128 @@
     return finalizeParsedStations(rawStations);
   }
 
-  async function fetchOverpassCsvFast(query) {
-    const endpoints = [
-      'https://overpass.kumi.systems/api/interpreter',
-      'https://overpass-api.de/api/interpreter',
-      'https://overpass.private.coffee/api/interpreter'
-    ];
-    const encoded = encodeURIComponent(query);
-    const controllers = endpoints.map(() => (typeof AbortController !== 'undefined' ? new AbortController() : null));
-    const timers = controllers.map(ctrl => setTimeout(() => { if (ctrl) ctrl.abort(); }, 14000));
-
-    const tasks = endpoints.map((url, idx) => (async () => {
-      const ctrl = controllers[idx];
-      const resp = await fetch(`${url}?data=${encoded}`, {
-        method: 'GET',
-        signal: ctrl ? ctrl.signal : undefined
-      });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const text = await resp.text();
-      if (!text || text[0] === '<' || text.startsWith('runtime error')) {
-        throw new Error('Invalid Overpass response');
+  function mergeStationsIntoExisting(incoming, replaceAll = false) {
+    if (!incoming || incoming.length === 0) return 0;
+    if (replaceAll) {
+      EXISTING_STATIONS = incoming.slice();
+      return incoming.length;
+    }
+    const nameIndex = new Map();
+    for (let i = 0; i < EXISTING_STATIONS.length; i++) {
+      const ex = EXISTING_STATIONS[i];
+      let arr = nameIndex.get(ex.name);
+      if (!arr) { arr = []; nameIndex.set(ex.name, arr); }
+      arr.push(ex);
+    }
+    let added = 0;
+    for (let i = 0; i < incoming.length; i++) {
+      const st = incoming[i];
+      const arr = nameIndex.get(st.name);
+      const dup = arr && arr.some(ex => Math.abs(ex.lat - st.lat) < 0.004 && Math.abs(ex.lng - st.lng) < 0.005);
+      if (!dup) {
+        EXISTING_STATIONS.push(st);
+        if (arr) arr.push(st);
+        else nameIndex.set(st.name, [st]);
+        added += 1;
       }
-      // 最速ミラーが成功したら他のリクエストを即座に中断
-      controllers.forEach((c, j) => {
-        clearTimeout(timers[j]);
-        if (j !== idx && c) c.abort();
-      });
-      return text;
-    })());
+    }
+    return added;
+  }
 
+  // 表示中のOpenFreeMapベクトルタイルから既存駅を通信ゼロ（0ms）で自動取込
+  function syncStationsFromVectorTiles() {
+    if (!map || !mapReady || map.getZoom() < 12 || !map.getLayer('nationwide-stations-vector')) return 0;
     try {
-      if (typeof Promise.any === 'function') {
-        return await Promise.any(tasks);
+      const feats = map.queryRenderedFeatures({ layers: ['nationwide-stations-vector'] });
+      if (!feats || feats.length === 0) return 0;
+      const vtStations = [];
+      for (let i = 0; i < feats.length; i++) {
+        const f = feats[i];
+        if (!f.geometry || f.geometry.type !== 'Point') continue;
+        const p = f.properties || {};
+        const raw = (p['name:ja'] || p.name || '').trim();
+        const nm = raw.replace(/駅$/, '').trim();
+        if (!nm || nm.length > 16 || /^[0-9A-Za-z\s\-]+$/.test(nm)) continue;
+        const [lng, lat] = f.geometry.coordinates;
+        if (!isFinite(lat) || !isFinite(lng)) continue;
+        vtStations.push({
+          id: 'vt_' + Math.round(lat * 1e4) + '_' + Math.round(lng * 1e4),
+          name: nm,
+          lat,
+          lng,
+          hub: false,
+          major: (p.rank != null && Number(p.rank) <= 3),
+          hubCost: 22,
+          lines: ['既存線'],
+          directCost: 65,
+          directFee: 3.2,
+          directSlots: 6
+        });
       }
-      // Promise.any 非対応ブラウザ向けフォールバック
-      return await new Promise((resolve, reject) => {
-        let rejected = 0;
-        tasks.forEach(t => t.then(resolve, () => {
-          rejected += 1;
-          if (rejected === tasks.length) reject(new Error('All Overpass mirrors failed'));
-        }));
-      });
-    } finally {
-      timers.forEach(clearTimeout);
+      const added = mergeStationsIntoExisting(vtStations, false);
+      if (added > 0 && map.getSource('existing-stations')) {
+        map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
+      }
+      return added;
+    } catch (_) {
+      return 0;
     }
   }
+
+  async function fetchOverpassCsvFast(query, timeoutMs = 11000) {
+    const primaryMirrors = [
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass-api.de/api/interpreter'
+    ];
+    const fallbackMirror = 'https://overpass.private.coffee/api/interpreter';
+    const encoded = encodeURIComponent(query);
+
+    async function raceUrls(urls, ms) {
+      const controllers = urls.map(() => (typeof AbortController !== 'undefined' ? new AbortController() : null));
+      const timers = controllers.map(ctrl => setTimeout(() => { if (ctrl) ctrl.abort(); }, ms));
+      const tasks = urls.map((url, idx) => (async () => {
+        const ctrl = controllers[idx];
+        const resp = await fetch(`${url}?data=${encoded}`, {
+          method: 'GET',
+          signal: ctrl ? ctrl.signal : undefined
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const text = await resp.text();
+        if (!text || text[0] === '<' || text.startsWith('runtime error')) {
+          throw new Error('Invalid Overpass response');
+        }
+        controllers.forEach((c, j) => {
+          clearTimeout(timers[j]);
+          if (j !== idx && c) c.abort();
+        });
+        return text;
+      })());
+      try {
+        if (typeof Promise.any === 'function') return await Promise.any(tasks);
+        return await new Promise((resolve, reject) => {
+          let rejected = 0;
+          tasks.forEach(t => t.then(resolve, () => {
+            rejected += 1;
+            if (rejected === tasks.length) reject(new Error('All mirrors failed'));
+          }));
+        });
+      } finally {
+        timers.forEach(clearTimeout);
+      }
+    }
+
+    try {
+      return await raceUrls(primaryMirrors, timeoutMs);
+    } catch (_) {
+      return await raceUrls([fallbackMirror], timeoutMs);
+    }
+  }
+
+  function buildOverpassStationsQuery(s, w, n, e, timeoutSec = 12) {
+    return `[out:csv(::id,::lat,::lon,"name:ja",name,operator,line;false)][timeout:${timeoutSec}];node["railway"="station"](${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)});out qt;`;
+  }
+
+  let bgLoadSeq = 0;
 
   async function loadOsmRailForCurrentView(replaceExisting = false, explicitBbox = null, cacheKey = null) {
     if (!map || !mapReady || osmLoading) return;
@@ -1282,9 +1367,11 @@
     } else {
       const c = map.getCenter();
       const b = map.getBounds();
-      // 画面範囲に余白を加え、最低約70km四方〜最大約200km四方（関東全域クラス）まで一括読込
-      const halfLat = Math.max(0.32, Math.min(0.85, (b.getNorth() - b.getSouth()) * 0.65));
-      const halfLng = Math.max(0.40, Math.min(1.10, (b.getEast() - b.getWest()) * 0.65));
+      // スマホは軽量な約50km四方を優先取得して体感速度を大幅短縮（PCは最大約140km四方）
+      const maxHalfLat = IS_MOBILE ? 0.28 : 0.60;
+      const maxHalfLng = IS_MOBILE ? 0.34 : 0.78;
+      const halfLat = Math.max(0.18, Math.min(maxHalfLat, (b.getNorth() - b.getSouth()) * 0.6));
+      const halfLng = Math.max(0.22, Math.min(maxHalfLng, (b.getEast() - b.getWest()) * 0.6));
       s = c.lat - halfLat;
       n = c.lat + halfLat;
       w = c.lng - halfLng;
@@ -1293,28 +1380,10 @@
 
     const effectiveCacheKey = cacheKey || `bb_${(Math.round(s * 10) / 10).toFixed(1)}_${(Math.round(w * 10) / 10).toFixed(1)}_${(Math.round(n * 10) / 10).toFixed(1)}_${(Math.round(e * 10) / 10).toFixed(1)}`;
 
-    // 永続キャッシュ（localStorage・7日間有効）があれば即座に反映
+    // 0. 永続キャッシュ（localStorage・7日間有効）があれば通信ゼロで即時反映
     const cachedStations = loadStationsCache(effectiveCacheKey);
     if (cachedStations && cachedStations.length > 0) {
-      if (replaceExisting || !customExistingLinesGeoJSON) {
-        EXISTING_STATIONS = cachedStations;
-      } else {
-        const nameIndex = new Map();
-        EXISTING_STATIONS.forEach(ex => {
-          let arr = nameIndex.get(ex.name);
-          if (!arr) { arr = []; nameIndex.set(ex.name, arr); }
-          arr.push(ex);
-        });
-        for (const st of cachedStations) {
-          const arr = nameIndex.get(st.name);
-          const dup = arr && arr.some(ex => Math.abs(ex.lat - st.lat) < 0.004 && Math.abs(ex.lng - st.lng) < 0.005);
-          if (!dup) {
-            EXISTING_STATIONS.push(st);
-            if (arr) arr.push(st);
-            else nameIndex.set(st.name, [st]);
-          }
-        }
-      }
+      mergeStationsIntoExisting(cachedStations, replaceExisting || !customExistingLinesGeoJSON);
       customExistingLinesGeoJSON = { type: 'FeatureCollection', features: [] };
       if (map.getSource('existing-lines')) map.getSource('existing-lines').setData(customExistingLinesGeoJSON);
       if (map.getSource('existing-stations')) map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
@@ -1325,21 +1394,29 @@
       return;
     }
 
-    // 最小7列CSV＋quadtile順出力（out qt）で通信量を従来JSONの約1/15へ圧縮＋3ミラー並列レース
-    const query = `[out:csv(::id,::lat,::lon,"name:ja",name,operator,line;false)][timeout:15];node["railway"="station"](${s.toFixed(3)},${w.toFixed(3)},${n.toFixed(3)},${e.toFixed(3)});out qt;`;
+    // まず現在画面のベクトルタイルから即座に駅を取り込む（0ms）
+    syncStationsFromVectorTiles();
+
+    // 関東全域などの超広域プリセットは2段階読込：
+    // Stage 1: 中心部（約45km四方）を最速取得してすぐ遊べる状態に → Stage 2: 周辺全域をバックグラウンド補完
+    const isHugeArea = (n - s) > 0.75 || (e - w) > 0.95;
+    const cLat = (s + n) * 0.5;
+    const cLng = (w + e) * 0.5;
+    const s1 = isHugeArea ? [cLat - 0.22, cLng - 0.28, cLat + 0.22, cLng + 0.28] : [s, w, n, e];
 
     osmLoading = true;
+    const mySeq = ++bgLoadSeq;
     const t0 = performance.now();
-    if (btn) { btn.textContent = '広域読込中...'; btn.disabled = true; }
+    if (btn) { btn.textContent = isHugeArea ? '中心部読込中...' : '駅読込中...'; btn.disabled = true; }
     try {
       let csvText = null;
       try {
-        csvText = await fetchOverpassCsvFast(query);
+        csvText = await fetchOverpassCsvFast(buildOverpassStationsQuery(s1[0], s1[1], s1[2], s1[3], 10), 10000);
       } catch (_) {
         csvText = null;
       }
       if (!csvText) {
-        showToast('駅データの取得に失敗しました（少し待って再試行してください）');
+        showToast('駅データの取得に失敗しました（ズームインすると地図タイルから自動表示されます）');
         return;
       }
       const parsedStations = parseOverpassStationsCsv(csvText);
@@ -1348,41 +1425,44 @@
         return;
       }
 
-      if (replaceExisting || !customExistingLinesGeoJSON) {
-        EXISTING_STATIONS = parsedStations;
-      } else {
-        const nameIndex = new Map();
-        EXISTING_STATIONS.forEach(ex => {
-          let arr = nameIndex.get(ex.name);
-          if (!arr) { arr = []; nameIndex.set(ex.name, arr); }
-          arr.push(ex);
-        });
-        for (const st of parsedStations) {
-          const arr = nameIndex.get(st.name);
-          const dup = arr && arr.some(ex => Math.abs(ex.lat - st.lat) < 0.004 && Math.abs(ex.lng - st.lng) < 0.005);
-          if (!dup) {
-            EXISTING_STATIONS.push(st);
-            if (arr) arr.push(st);
-            else nameIndex.set(st.name, [st]);
-          }
-        }
-      }
-
-      // 路線描画は全国対応のGPUベクトルタイル（nationwide-rail-vector）へ一本化し、重複GeoJSONを空にして超軽量化
+      mergeStationsIntoExisting(parsedStations, replaceExisting || !customExistingLinesGeoJSON);
       customExistingLinesGeoJSON = { type: 'FeatureCollection', features: [] };
-      if (map.getSource('existing-lines')) {
-        map.getSource('existing-lines').setData(customExistingLinesGeoJSON);
-      }
-      if (map.getSource('existing-stations')) {
-        map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
-      }
-      saveStationsCache(effectiveCacheKey, parsedStations);
+      if (map.getSource('existing-lines')) map.getSource('existing-lines').setData(customExistingLinesGeoJSON);
+      if (map.getSource('existing-stations')) map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
+
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
       playSfx('build');
-      showToast(`広域の既存駅を読込完了（${EXISTING_STATIONS.length}駅 / ${sec}秒・次回は即時表示）`);
+      if (!isHugeArea) {
+        saveStationsCache(effectiveCacheKey, parsedStations);
+        showToast(`周辺駅を読込完了（累計 ${EXISTING_STATIONS.length}駅 / ${sec}秒）`);
+      } else {
+        showToast(`中心部の${parsedStations.length}駅を先行読込（${sec}秒）・外周エリアを裏で補完中...`);
+      }
       recalculateSimulation(false);
       updateHUD();
       renderPanel();
+
+      // Stage 2: 関東全域など広域の残りエリアをUIをブロックせずバックグラウンド取得→永続キャッシュ保存
+      if (isHugeArea) {
+        setTimeout(async () => {
+          if (mySeq !== bgLoadSeq) return;
+          try {
+            const fullCsv = await fetchOverpassCsvFast(buildOverpassStationsQuery(s, w, n, e, 16), 16000);
+            if (!fullCsv || mySeq !== bgLoadSeq) return;
+            const fullStations = parseOverpassStationsCsv(fullCsv);
+            if (fullStations.length > 0) {
+              mergeStationsIntoExisting(fullStations, false);
+              if (map.getSource('existing-stations')) {
+                map.getSource('existing-stations').setData(buildExistingStationsGeoJSON());
+              }
+              saveStationsCache(effectiveCacheKey, fullStations);
+              showToast(`広域の全駅補完が完了（全${EXISTING_STATIONS.length}駅・次回から即時表示）`);
+              recalculateSimulation(false);
+              updateHUD();
+            }
+          } catch (_) {}
+        }, 1200);
+      }
     } finally {
       osmLoading = false;
       if (btn) { btn.textContent = '広域の駅を読込'; btn.disabled = false; }
