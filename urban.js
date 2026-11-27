@@ -665,23 +665,19 @@ window.RAIL_URBAN = (() => {
       angleRad: cand.angleRad,
       roadAligned: cand.roadAligned,
       roadSource: cand.roadSource,
-      costPaid: cand.cost
+      costPaid: cand.cost,
+      // 着工してから完成するまでの月数。完成した月に住民・商業の効果が出る
+      buildLeft: cand.lm.buildMonths || 4,
+      buildTotal: cand.lm.buildMonths || 4,
+      popAdded: 0,
+      commAdded: 0
     };
     state.developments.push(dev);
 
-    let popAdded = 0, commAdded = 0;
-    if (cand.nearSt) {
-      const mult = cand.roadSource === 'rotary' ? 1.15 : (cand.roadAligned ? 1.0 : 0.8);
-      popAdded = Math.round(cand.lm.popAdd * mult);
-      commAdded = Math.round(cand.lm.commAdd * mult);
-      cand.nearSt.areaPop += popAdded;
-      cand.nearSt.comm = Math.min(100, cand.nearSt.comm + commAdded);
-      cand.nearSt.devLevel = Math.min(100, cand.nearSt.devLevel + 10);
-    }
-    state.undoStack.push({ type: 'development', devId, costPaid: cand.cost, popAdded, commAdded });
+    state.undoStack.push({ type: 'development', devId, costPaid: cand.cost });
     playSfx('build');
     const srcLabel = cand.roadSource === 'rotary' ? 'ロータリー沿い' : (cand.roadSource === 'custom' ? '新設道路沿い' : (cand.roadSource === 'real' ? '実在道路沿い' : '自由配置'));
-    showToast(`「${cand.lm.name}」を${srcLabel}に建設（${cand.cost}億円）`);
+    showToast(`「${cand.lm.name}」を${srcLabel}に着工（${cand.cost}億円・${dev.buildTotal}か月で完成）`);
     clearPreviewTrack();
     recalculateSimulation(false);
     syncMapGeoJSON({ tracks: false });

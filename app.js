@@ -376,7 +376,12 @@
     month: 4,
     tickInMonth: 0,
     speed: 1,
-    funds: 2000.0,
+    funds: 700.0,
+    debt: 0,
+    goalsDone: {},
+    monthCount: 0,
+    lowFundsMonths: 0,
+    gameOver: false,
     activeTab: 'route',
     buildMode: 'track', // 'track' | 'station' | 'road' | 'rotary' | 'redev' | 'landmark' | null
     selectedPoint: null, // { lat, lng, muni }
@@ -439,7 +444,10 @@
     const muni = getNearestMunicipality(lat, lng);
     const density = muni.pop / muni.area; // 人/km²
     // 駅勢圏（半径約1km ≈ 3.14km²）の実在人口ベース初期値
-    const areaPop = Math.round(density * 2.65);
+    // 駅勢圏（半径約1km）に住む人のうち、開業時点でこの路線を使うのは3割程度。
+    // 残りは路線の便利さや沿線開発しだいで少しずつ移ってくる「伸びしろ」。
+    const potentialPop = Math.round(density * 2.65);
+    const areaPop = Math.round(potentialPop * 0.3);
     const exBoost = existingId ? 16 : 0;
     return {
       id,
@@ -455,6 +463,7 @@
       landmark: null,
       areaPop,
       initialPop: areaPop,
+      potentialPop,
       comm: Math.min(100, Math.round(muni.commBase * 0.8 + exBoost)),
       landPrice: Math.round(muni.priceBase * (existingId ? 1.2 : 0.95)),
       ridership: 0,
@@ -580,8 +589,12 @@
         opCost: 0,
         directCost: 0,
         landmarkCost: 0,
-        netProfit: 0
+        interestCost: state.debt * 0.003,
+        netProfit: -state.debt * 0.003
       };
+      if (advanceGrowth && state.debt > 0) {
+        state.funds = Math.round((state.funds - state.debt * 0.003) * 10) / 10;
+      }
       return;
     }
 
@@ -630,6 +643,7 @@
     state.developments.forEach(dev => {
       const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
       if (!lm) return;
+      if (dev.buildLeft > 0) return; // 工事中は収益も維持費も発生しない
       totalLandmarkUpkeep += lm.upkeep;
       const roadMult = dev.roadSource === 'rotary' ? 1.15 : (dev.roadAligned ? 1.0 : 0.80);
       totalWeekendAttr += lm.commAdd * lm.weekendBoost * roadMult;
@@ -744,17 +758,21 @@
         const expRiders = ridership * Math.min(0.24, expressFreqAtSt * 0.045) * lmWeekend;
         totalExpressRev += (expRiders * 450 * 30) / 1e8;
       }
-      totalEstateRev += (st.comm * 0.025) + (st.devLevel * 0.04) + lmRev;
+      // 不動産収入: 駅前の商業＋新しく住み始めた人（分譲・賃貸）＋開発施設
+      const newResidents = Math.max(0, st.areaPop - st.initialPop);
+      totalEstateRev += (st.comm * 0.02) + (newResidents / 10000) * 0.6 + (st.devLevel * 0.01) + lmRev;
 
       if (advanceGrowth) {
         const z = ZONINGS[st.zoning] || ZONINGS.residential;
         const growthDrive = (finalAccess - 44) / 100;
-        const congDrag = congestion > 155 ? -0.15 : 0;
-        const cap = 125000;
-        const headroom = Math.max(0.06, 1 - st.areaPop / cap);
-        const deltaRate = (growthDrive + congDrag) * 0.011 * z.popMult * headroom;
-        const popDelta = Math.round(st.areaPop * deltaRate);
-        st.areaPop = Math.max(3000, st.areaPop + popDelta);
+        // 伸びしろ（駅勢圏の住民＋開発で増えた分）のうち、便利さに応じた割合まで少しずつ移ってくる
+        const pot = st.potentialPop || st.initialPop * 3;
+        const share = Math.min(1.15, Math.max(0.2, 0.05 + (finalAccess / 100) * 0.6) * z.popMult);
+        const target = pot * share;
+        const gap = target - st.areaPop;
+        const rate = gap > 0 ? (congestion > 155 ? 0.012 : 0.03) : 0.01;
+        const popDelta = Math.round(gap * rate);
+        st.areaPop = Math.max(1500, st.areaPop + popDelta);
 
         const commDelta = growthDrive > 0 ? growthDrive * 0.8 * z.commMult : -0.05;
         st.comm = Math.max(12, Math.min(100, st.comm + commDelta));
@@ -773,7 +791,7 @@
       const m = (STRUCTURES[sg.structure] || STRUCTURES.surface).upkeepMult;
       return acc + sg.lengthKm * 0.22 * m + sg.levelCrossings * 0.12;
     }, 0);
-    const trackCost = structTrackCost + state.myStations.length * 0.45 + passingCount * 0.35;
+    const trackCost = structTrackCost + state.myStations.length * 0.8 + passingCount * 0.35;
 
     let totalFreq = 0;
     let directFreq = 0;
@@ -789,8 +807,9 @@
       if (ex) directFee += ex.directFee * (directFreq > 0 ? 1 : 0.35);
     });
 
+    const interestCost = state.debt * 0.003; // 借入金の利息（月0.3%）
     const totalRev = totalFareRev + totalExpressRev + totalEstateRev;
-    const totalExp = trackCost + opCost + directFee + totalLandmarkUpkeep;
+    const totalExp = trackCost + opCost + directFee + totalLandmarkUpkeep + interestCost;
     const netProfit = totalRev - totalExp;
 
     state.finance = {
@@ -801,6 +820,7 @@
       opCost,
       directCost: directFee,
       landmarkCost: totalLandmarkUpkeep,
+      interestCost,
       netProfit
     };
 
@@ -1489,13 +1509,15 @@
       const zColor = st.congestion > 130 ? '#ef4444' : (ZONINGS[st.zoning] ? ZONINGS[st.zoning].color : '#0ea5e9');
       return {
         type: 'Feature',
-        properties: { id: st.id, color: zColor },
+        properties: { id: st.id, color: zColor, r: Math.round(10 + Math.sqrt(Math.max(0, st.areaPop)) / 8) },
         geometry: { type: 'Point', coordinates: [st.lng, st.lat] }
       };
     });
     if (map.getSource('station-zones')) {
       map.getSource('station-zones').setData({ type: 'FeatureCollection', features: zoneFeatures });
     }
+    syncGrowthBuildings();
+    syncDevMarkers();
 
     // 自社路線（月次更新時は線路・ノードの再送信を省略して軽量化）
     if (updateTracks) {
@@ -1616,9 +1638,26 @@
         const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
         if (!lm) return;
         const st = dev.stationId ? state.myStations.find(s => s.id === dev.stationId) : null;
-        const built = buildDevelopmentFeatures(dev, lm, st ? st.devLevel : 0);
+        // 実寸だと引いた地図で見えないので、見た目は1.6倍に大きくする
+        const visLm = Object.assign({}, lm, { w: (lm.w || 60) * 1.6, d: (lm.d || 34) * 1.6, h: (lm.h || 60) * 1.5 });
+        const built = buildDevelopmentFeatures(dev, visLm, st ? st.devLevel : 0);
         lotFeatures.push(built.lotFeature);
-        built.buildings.forEach(b => bldgFeatures.push(b));
+        if (dev.buildLeft > 0) {
+          // 工事中: 囲いと、完成に近づくほど高くなる骨組み
+          const prog = 1 - dev.buildLeft / (dev.buildTotal || 1);
+          bldgFeatures.push({
+            type: 'Feature',
+            properties: { color: '#a8a29e', height: 6 },
+            geometry: { type: 'Polygon', coordinates: makeRotatedRect(dev.lng, dev.lat, visLm.w * 0.5, visLm.d * 0.5, dev.angleRad || 0) }
+          });
+          bldgFeatures.push({
+            type: 'Feature',
+            properties: { color: '#d6d3d1', height: Math.round(10 + visLm.h * 0.8 * prog) },
+            geometry: { type: 'Polygon', coordinates: makeRotatedRect(dev.lng, dev.lat, visLm.w * 0.3, visLm.d * 0.3, dev.angleRad || 0) }
+          });
+        } else {
+          built.buildings.forEach(b => bldgFeatures.push(b));
+        }
       });
       // 旧互換（st.landmark）
       state.myStations.forEach(st => {
@@ -1705,10 +1744,258 @@
     map.getSource('my-trains').setData({ type: 'FeatureCollection', features });
   }
 
+
+  // =========================================================================
+  // 6b. 街の育ち方の見た目（新しく住み始めた人の家・開発施設の目印）
+  // =========================================================================
+  function seededRandom(seedStr) {
+    let h = 2166136261;
+    for (let i = 0; i < seedStr.length; i++) { h ^= seedStr.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return () => {
+      h += 0x6D2B79F5;
+      let t = h;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const GROWTH_COLORS = ['#c4b5fd', '#a5b4fc', '#ddd6fe', '#f0abfc'];
+
+  function syncGrowthBuildings() {
+    if (!mapReady || !map || !map.getSource('growth-buildings')) return;
+    const features = [];
+    state.myStations.forEach(st => {
+      const newcomers = Math.max(0, st.areaPop - st.initialPop);
+      // 1棟あたり約900人として、駅ごとに最大70棟まで
+      const count = Math.min(70, Math.floor(newcomers / 900));
+      if (count <= 0) return;
+      const rnd = seededRandom(st.id);
+      for (let i = 0; i < count; i++) {
+        // 駅に近い順に建っていく（i が小さいほど駅の近く）
+        const ring = 90 + Math.sqrt((i + 1) / 70) * 620;
+        const ang = rnd() * Math.PI * 2;
+        const dist = ring * (0.75 + rnd() * 0.45);
+        const ox = Math.cos(ang) * dist, oy = Math.sin(ang) * dist;
+        const nearStation = dist < 260;
+        const hw = 9 + rnd() * 9;
+        const hd = 7 + rnd() * 7;
+        const h = nearStation ? 24 + rnd() * 36 : 9 + rnd() * 14;
+        const pos = fromLocalMeters(ox, oy, st.lng, st.lat);
+        features.push({
+          type: 'Feature',
+          properties: { color: GROWTH_COLORS[i % GROWTH_COLORS.length], height: Math.round(h) },
+          geometry: { type: 'Polygon', coordinates: makeRotatedRect(pos[0], pos[1], hw, hd, rnd() * Math.PI) }
+        });
+      }
+    });
+    map.getSource('growth-buildings').setData({ type: 'FeatureCollection', features });
+  }
+
+  function syncDevMarkers() {
+    if (!mapReady || !map || !map.getSource('dev-markers')) return;
+    const features = state.developments.map(dev => {
+      const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
+      if (!lm) return null;
+      const building = dev.buildLeft > 0;
+      return {
+        type: 'Feature',
+        properties: {
+          color: lm.color,
+          building,
+          label: building ? `${lm.short || lm.name} 工事中 あと${dev.buildLeft}か月` : (lm.short || lm.name)
+        },
+        geometry: { type: 'Point', coordinates: [dev.lng, dev.lat] }
+      };
+    }).filter(Boolean);
+    map.getSource('dev-markers').setData({ type: 'FeatureCollection', features });
+  }
+
+  // =========================================================================
+  // 6c. 毎月の進行（工事・目標・出来事・資金繰り）
+  // =========================================================================
+  const GOALS = [
+    { id: 'open',    label: '2駅以上で開業する',               reward: 30,  check: () => state.myStations.length >= 2 },
+    { id: 'direct',  label: '既存線と直通運転を始める',         reward: 30,  check: () => getConnectedDirectStations().length > 0 },
+    { id: 'black',   label: '月の収支を黒字にする',             reward: 30,  check: () => state.myStations.length >= 2 && state.finance.netProfit > 0 },
+    { id: 'pop5',    label: '沿線人口5万人',                   reward: 40,  check: () => getCorridorPop() >= 50000 },
+    { id: 'dev3',    label: '沿線開発を3件完成させる',          reward: 50,  check: () => state.developments.filter(d => !(d.buildLeft > 0)).length >= 3 },
+    { id: 'fast',    label: '都心まで30分以内の駅を3つつくる',   reward: 40,  check: () => state.myStations.length >= 2 && state.myStations.filter(st => st.hubTime <= 30).length >= 3 },
+    { id: 'pop10',   label: '沿線人口10万人',                  reward: 80,  check: () => getCorridorPop() >= 100000 },
+    { id: 'profit20', label: '月の純利益20億円',               reward: 100, check: () => state.finance.netProfit >= 20 },
+    { id: 'pop20',   label: '沿線人口20万人',                  reward: 150, check: () => getCorridorPop() >= 200000 },
+    { id: 'pop40',   label: '沿線人口40万人（大手私鉄の仲間入り）', reward: 300, check: () => getCorridorPop() >= 400000 }
+  ];
+
+  function getNextGoal() {
+    return GOALS.find(g => !state.goalsDone[g.id]) || null;
+  }
+
+  function checkGoals() {
+    GOALS.forEach(g => {
+      if (state.goalsDone[g.id]) return;
+      if (g.check()) {
+        state.goalsDone[g.id] = `${state.year}/${state.month}`;
+        state.funds = Math.round((state.funds + g.reward) * 10) / 10;
+        showToast(`目標達成「${g.label}」 補助金 +${g.reward}億円`, 5000);
+        playSfx('build');
+      }
+    });
+  }
+
+  function progressConstruction() {
+    state.developments.forEach(dev => {
+      if (!(dev.buildLeft > 0)) return;
+      dev.buildLeft -= 1;
+      if (dev.buildLeft > 0) return;
+      dev.buildLeft = 0;
+      const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
+      const st = dev.stationId ? state.myStations.find(s => s.id === dev.stationId) : null;
+      if (lm && st) {
+        const mult = dev.roadSource === 'rotary' ? 1.15 : (dev.roadAligned ? 1.0 : 0.8);
+        dev.popAdded = Math.round(lm.popAdd * mult);
+        dev.commAdded = Math.round(lm.commAdd * mult);
+        // 入居は6割がすぐ、残りは伸びしろとして少しずつ
+        st.potentialPop = (st.potentialPop || st.initialPop * 3) + dev.popAdded;
+        st.areaPop += Math.round(dev.popAdded * 0.6);
+        st.comm = Math.min(100, st.comm + dev.commAdded);
+        st.devLevel = Math.min(100, st.devLevel + 10);
+      }
+      if (lm) {
+        showToast(`「${lm.name}」が${st ? st.name + '駅前に' : ''}完成しました`, 4000);
+        playSfx('build');
+      }
+    });
+  }
+
+  const EVENTS = [
+    {
+      id: 'tv', weight: 3,
+      run: () => {
+        const st = state.myStations[Math.floor(Math.random() * state.myStations.length)];
+        st.potentialPop = (st.potentialPop || st.initialPop * 3) + 3000;
+        return `${st.name}駅のまわりがテレビで紹介され、住みたい人が増えています`;
+      }
+    },
+    {
+      id: 'bus', weight: 2,
+      run: () => {
+        const st = state.myStations[Math.floor(Math.random() * state.myStations.length)];
+        st.potentialPop = Math.max(st.initialPop, (st.potentialPop || st.initialPop * 3) - 2500);
+        return `${st.name}駅の近くに競合のバス路線ができ、利用者が流れています`;
+      }
+    },
+    {
+      id: 'typhoon', weight: 2,
+      run: () => {
+        const loss = Math.round(Math.max(3, getLineLengthKm() * 1.2));
+        state.funds = Math.round((state.funds - loss) * 10) / 10;
+        return `台風で線路が被害を受けました（復旧費 ${loss}億円）`;
+      }
+    },
+    {
+      id: 'subsidy', weight: 2,
+      run: () => {
+        const amt = state.rotaries.length > 0 ? 25 : 12;
+        state.funds = Math.round((state.funds + amt) * 10) / 10;
+        return state.rotaries.length > 0
+          ? `駅前整備が評価され、自治体から補助金が出ました（+${amt}億円）`
+          : `沿線の自治体からまちづくりの補助金が出ました（+${amt}億円）`;
+      }
+    },
+    {
+      id: 'landprice', weight: 2,
+      run: () => {
+        const devCount = state.developments.filter(d => !(d.buildLeft > 0)).length;
+        const amt = 8 + devCount * 4;
+        state.funds = Math.round((state.funds + amt) * 10) / 10;
+        return `沿線の地価が上がり、保有地を売却できました（+${amt}億円）`;
+      }
+    }
+  ];
+  let lastEventMonth = 0;
+
+  function maybeRunEvent() {
+    if (state.myStations.length < 2) return;
+    if (state.monthCount - lastEventMonth < 6) return;
+    if (Math.random() > 0.12) return;
+    const total = EVENTS.reduce((a, e) => a + e.weight, 0);
+    let r = Math.random() * total;
+    const ev = EVENTS.find(e => (r -= e.weight) < 0) || EVENTS[0];
+    lastEventMonth = state.monthCount;
+    showToast(ev.run(), 5500);
+  }
+
+  function checkFunds() {
+    if (state.funds < 0) {
+      state.lowFundsMonths += 1;
+      if (state.lowFundsMonths === 1 || state.lowFundsMonths % 6 === 0) {
+        showToast('資金がマイナスです。「経営・統計」で借入するか、収支を立て直してください', 5000);
+      }
+      if (state.funds < -300 && !state.gameOver) {
+        state.gameOver = true;
+        state.speed = 0;
+        syncSpeedButtons(0);
+        showGameOver();
+      }
+    } else {
+      state.lowFundsMonths = 0;
+    }
+  }
+
+  function showGameOver() {
+    const box = document.createElement('div');
+    box.className = 'absolute inset-0 bg-slate-950/85 z-50 flex items-center justify-center p-4';
+    const doneCount = Object.keys(state.goalsDone).length;
+    box.innerHTML = `
+      <div class="bg-slate-900 border border-rose-500/60 rounded-2xl max-w-sm w-full p-5 text-center">
+        <div class="text-lg font-extrabold text-rose-300 mb-2">経営破綻</div>
+        <p class="text-sm text-slate-300 leading-relaxed mb-1">資金が尽き、路線は他社に売却されました。</p>
+        <p class="text-sm text-slate-300 mb-4">${state.year}年${state.month}月 ／ 沿線人口 ${(getCorridorPop() / 10000).toFixed(1)}万人 ／ 達成した目標 ${doneCount}個</p>
+        <button id="btn-restart" class="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm cursor-pointer">はじめからやり直す</button>
+      </div>`;
+    document.getElementById('app-shell').appendChild(box);
+    box.querySelector('#btn-restart').addEventListener('click', () => location.reload());
+  }
+
+  function borrow(amount) {
+    if (state.debt + amount > 1000) {
+      showToast('これ以上は借りられません（借入上限 1000億円）');
+      playSfx('error');
+      return;
+    }
+    state.debt += amount;
+    state.funds = Math.round((state.funds + amount) * 10) / 10;
+    showToast(`${amount}億円を借り入れました（利息 月0.3%）`);
+    playSfx('tap');
+  }
+
+  function repay(amount) {
+    const amt = Math.min(amount, state.debt);
+    if (amt <= 0) return;
+    if (state.funds < amt) {
+      showToast('返済する資金が足りません');
+      playSfx('error');
+      return;
+    }
+    state.debt -= amt;
+    state.funds = Math.round((state.funds - amt) * 10) / 10;
+    showToast(`${amt}億円を返済しました`);
+    playSfx('tap');
+  }
+
+  function onMonthAdvanced() {
+    state.monthCount += 1;
+    progressConstruction();
+    maybeRunEvent();
+    checkGoals();
+    checkFunds();
+  }
+
   // =========================================================================
   // 7. UI レンダリング（HUD & 下部4タブパネル）
   // =========================================================================
-  function showToast(msg) {
+  function showToast(msg, durationMs = 2400) {
     const box = document.getElementById('toast-box');
     const el = document.createElement('div');
     el.className = 'toast-item';
@@ -1716,14 +2003,14 @@
     box.appendChild(el);
     setTimeout(() => {
       if (el.parentNode) el.parentNode.removeChild(el);
-    }, 2400);
+    }, durationMs);
   }
 
   function updateHUD() {
     document.getElementById('hud-date').textContent = `${state.year}年${state.month}月`;
     const fundsEl = document.getElementById('hud-funds');
     fundsEl.textContent = `${state.funds.toFixed(1)}億円`;
-    fundsEl.className = `text-sm md:text-lg font-extrabold tabular-nums ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    fundsEl.className = `text-xs md:text-lg font-extrabold tabular-nums shrink-0 whitespace-nowrap ${state.funds >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
 
     const pop = getCorridorPop();
     const growthDiff = state.myStations.reduce((acc, st) => acc + (st.areaPop - st.initialPop), 0);
@@ -1844,8 +2131,10 @@
     if (state.myStations.length === 0) {
       if (state.selectedPoint) {
         const m = state.selectedPoint.muni;
-        titleEl.textContent = '新規路線を敷設しよう';
-        subEl.textContent = `マップをタップして1駅目を建設（例: 二子玉川・調布・登戸付近）`;
+        titleEl.textContent = '新しい路線をつくろう';
+        subEl.textContent = state.trackNodes.length < 2
+          ? '「線路を引く」で線路を引いてから、線路の上に駅を置きます'
+          : '「駅を設置」で線路の上に駅を2つ置くと開業します';
       }
       return;
     }
@@ -1937,10 +2226,15 @@
         ctaAction: 'tut-go-dev'
       };
     }
+    const next = getNextGoal();
     return {
       step: 7, total: 6, done: true,
-      title: 'チュートリアル完了',
-      desc: '基本操作をマスターしました！自由に路線を延伸し、黒字経営と沿線人口の拡大を目指そう。'
+      title: next ? `次の目標: ${next.label}` : 'すべての目標を達成しました',
+      desc: next
+        ? `達成すると補助金 ${next.reward}億円。目標の一覧と借入は「経営・統計」タブにあります。`
+        : '自由に路線を延ばして、沿線の街をさらに育てましょう。',
+      ctaLabel: state.activeTab === 'finance' ? null : '目標を見る',
+      ctaAction: 'tut-go-finance'
     };
   }
 
@@ -2287,7 +2581,7 @@
                 </div>
                 <div class="text-[9.5px] md:text-[11px] text-slate-300 mt-1 leading-snug">${lm.desc}</div>
                 <div class="flex items-center justify-between mt-1 text-[9px] text-slate-400">
-                  <span>規模 ${lm.w}×${lm.d}m</span>
+                  <span>工期 ${lm.buildMonths || 4}か月 ・ 住民 +${lm.popAdd.toLocaleString()}人</span>
                   ${builtCount > 0 ? `<span class="text-emerald-400 font-bold">×${builtCount}</span>` : ''}
                 </div>
               </button>`;
@@ -2298,18 +2592,52 @@
   }
 
   // --- タブ4: 経営・統計 ---
+  function renderGoalsAndLoanHtml() {
+    const next = getNextGoal();
+    const doneCount = GOALS.filter(g => state.goalsDone[g.id]).length;
+    const goalsHtml = GOALS.map(g => {
+      const done = !!state.goalsDone[g.id];
+      const isNext = next && next.id === g.id;
+      return `
+        <div class="flex items-center justify-between gap-2 px-2 py-1 rounded-md ${isNext ? 'bg-violet-500/15 border border-violet-400/40' : ''}">
+          <span class="${done ? 'text-slate-500 line-through' : (isNext ? 'text-white font-bold' : 'text-slate-300')}">${done ? '✓ ' : ''}${g.label}</span>
+          <span class="tabular-nums shrink-0 ${done ? 'text-slate-500' : 'text-violet-300 font-bold'}">+${g.reward}億</span>
+        </div>`;
+    }).join('');
+    return `
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 md:p-3 mb-2.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] md:text-xs font-bold text-slate-400">経営目標（達成すると補助金）</span>
+          <span class="text-[10px] md:text-xs text-slate-400 tabular-nums">${doneCount}/${GOALS.length}</span>
+        </div>
+        <div class="space-y-0.5 text-[10.5px] md:text-xs">${goalsHtml}</div>
+      </div>
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 md:p-3 mb-2.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] md:text-xs font-bold text-slate-400">借入金</span>
+          <span class="text-[10px] md:text-xs tabular-nums ${state.debt > 0 ? 'text-rose-300 font-bold' : 'text-slate-400'}">残高 ${state.debt}億円${state.debt > 0 ? `（利息 月${(state.debt * 0.003).toFixed(1)}億）` : ''}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button data-action="borrow" class="py-1.5 rounded-lg text-[11px] md:text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 cursor-pointer">100億円借りる</button>
+          <button data-action="repay" class="py-1.5 rounded-lg text-[11px] md:text-xs font-bold border cursor-pointer ${state.debt > 0 ? 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-600'}">100億円返す</button>
+        </div>
+        <p class="text-[10px] md:text-[11px] text-slate-500 mt-1.5 leading-snug">資金が −300億円を下回ると経営破綻です。</p>
+      </div>`;
+  }
+
   function renderFinanceTab(container) {
     if (state.myStations.length < 2) {
       container.innerHTML = `
-        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 text-xs md:text-sm text-slate-300 leading-relaxed">
-          2駅以上を開通させると、月次収支（運賃・特急・不動産）と沿線人口推移チャートが集計されます。
-        </div>`;
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-3 mb-2.5 text-xs md:text-sm text-slate-300 leading-relaxed">
+          2駅以上を開業させると、毎月の収支（運賃・特急・不動産）と沿線人口の推移が出ます。
+        </div>
+        ${renderGoalsAndLoanHtml()}`;
       return;
     }
 
     const f = state.finance;
     const totalRev = f.fareRev + f.expressRev + f.estateRev;
-    const totalExp = f.trackCost + f.opCost + f.directCost + f.landmarkCost;
+    const totalExp = f.trackCost + f.opCost + f.directCost + f.landmarkCost + (f.interestCost || 0);
 
     container.innerHTML = `
       <div class="grid grid-cols-3 gap-1.5 md:gap-2.5 mb-2.5">
@@ -2334,7 +2662,10 @@
         <div class="flex justify-between"><span class="text-slate-400">列車運行費</span><span class="font-bold text-slate-200">${f.opCost.toFixed(1)}億</span></div>
         <div class="flex justify-between"><span class="text-slate-400">沿線不動産</span><span class="font-bold text-slate-200">${f.estateRev.toFixed(1)}億</span></div>
         <div class="flex justify-between"><span class="text-slate-400">直通・施設費</span><span class="font-bold text-slate-200">${(f.directCost + f.landmarkCost).toFixed(1)}億</span></div>
+        ${f.interestCost > 0 ? `<div></div><div class="flex justify-between"><span class="text-slate-400">借入金の利息</span><span class="font-bold text-rose-300">${f.interestCost.toFixed(1)}億</span></div>` : ''}
       </div>
+
+      ${renderGoalsAndLoanHtml()}
 
       <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 md:p-3 mb-2.5">
         <div class="text-[10px] md:text-xs font-bold text-slate-400 mb-1.5">沿線人口の推移（万人）</div>
@@ -2770,9 +3101,10 @@
         state.developments.splice(dIdx, 1);
         const lm = LANDMARKS.find(l => l.id === dev.landmarkId);
         const st = dev.stationId ? state.myStations.find(s => s.id === dev.stationId) : null;
-        if (lm && st) {
-          st.areaPop = Math.max(3000, st.areaPop - (last.popAdded || 0));
-          st.comm = Math.max(12, st.comm - (last.commAdded || 0));
+        if (lm && st && !(dev.buildLeft > 0)) {
+          st.areaPop = Math.max(1500, st.areaPop - Math.round((dev.popAdded || 0) * 0.6));
+          if (st.potentialPop) st.potentialPop = Math.max(st.initialPop, st.potentialPop - (dev.popAdded || 0));
+          st.comm = Math.max(12, st.comm - (dev.commAdded || 0));
           st.devLevel = Math.max(0, st.devLevel - 10);
         }
       }
@@ -2934,6 +3266,20 @@
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
+
+    if (action === 'borrow') {
+      borrow(100);
+      updateHUD();
+      renderPanel();
+      return;
+    }
+    if (action === 'repay') {
+      repay(100);
+      recalculateSimulation(false);
+      updateHUD();
+      renderPanel();
+      return;
+    }
 
     if (action === 'set-structure') {
       state.buildStructure = btn.dataset.struct;
@@ -3203,6 +3549,8 @@
   document.getElementById('btn-mute').addEventListener('click', (e) => {
     isMuted = !isMuted;
     e.currentTarget.textContent = isMuted ? '音OFF' : '音ON';
+    const mBtn = document.getElementById('btn-mute-m');
+    if (mBtn) mBtn.textContent = isMuted ? '音OFF' : '音ON';
   });
 
   const helpModal = document.getElementById('help-modal');
@@ -3252,6 +3600,8 @@
       switchTab('service');
     } else if (act === 'tut-go-dev') {
       switchTab('dev');
+    } else if (act === 'tut-go-finance') {
+      switchTab('finance');
     } else if (act === 'tut-skip-direct') {
       state.tutorialSkippedDirect = true;
       renderTutorial();
@@ -3399,13 +3749,14 @@
       }
 
       state.tickInMonth += dt * state.speed;
-      if (state.tickInMonth >= 4.5) {
+      if (state.tickInMonth >= 4.5 && !state.gameOver) {
         state.tickInMonth = 0;
         state.month += 1;
         if (state.month > 12) { state.month = 1; state.year += 1; }
         recalculateSimulation(true);
+        onMonthAdvanced();
         recordHistory();
-        if (state.myStations.length > 0) syncMapGeoJSON({ tracks: false, dev: false });
+        if (state.myStations.length > 0) syncMapGeoJSON({ tracks: false, dev: state.developments.length > 0 });
         playSfx('month');
         updateHUD();
         if (state.activeTab === 'finance') renderPanel();
@@ -3467,12 +3818,22 @@
     }
   });
 
-  window.addEventListener('load', () => {
+  // 画像や地図タイルの読み込み完了（load）を待たずに画面を組み立てる。
+  // load を待つと、外部の読み込みが遅いときにパネルが空のまま止まって見えるため。
+  function boot() {
     initWorld();
-    initMap();
     updateHUD();
     renderPanel();
+    initMap();
     if (rafId) cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(gameLoop);
-  });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  // 動作確認用（ブラウザのコンソールから状態を見る）
+  window.__devrail = { state, recalculateSimulation, onMonthAdvanced, getCorridorPop, createStationState, rebuildTrainActors, syncMapGeoJSON, get map() { return map; } };
 })();

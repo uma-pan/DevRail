@@ -81,6 +81,48 @@ window.RAIL_GEO = (() => {
     const sign = cross >= 0 ? 1 : -1;
     const nx = -ty * sign;
     const ny = tx * sign;
+
+    // 曲がる角度が大きいときは「曲線＋直線」にする。
+    // 1本の円弧だけで結ぶと、クリックした点よりずっと外側まで線路が膨らんでしまうため。
+    if (absAlpha > 0.5) {
+      const r = Math.max(160, Math.min(R, dist * 0.3));
+      const ccx = nx * r, ccy = ny * r;
+      const wx = vx - ccx, wy = vy - ccy;
+      const d = Math.hypot(wx, wy);
+      if (d > r * 1.02) {
+        const thetaW = Math.atan2(wy, wx);
+        const beta = Math.acos(r / d);
+        const phi0 = Math.atan2(-ccy, -ccx);
+        // 反時計回り(sign>0)なら接点は thetaW - beta、時計回りなら thetaW + beta
+        const phiQ = sign > 0 ? thetaW - beta : thetaW + beta;
+        let sweep = phiQ - phi0;
+        if (sign > 0) { while (sweep < 0) sweep += Math.PI * 2; while (sweep >= Math.PI * 2) sweep -= Math.PI * 2; }
+        else { while (sweep > 0) sweep -= Math.PI * 2; while (sweep <= -Math.PI * 2) sweep += Math.PI * 2; }
+        if (Math.abs(sweep) < Math.PI * 1.15) {
+          const arcN = Math.max(4, Math.min(16, Math.ceil(Math.abs(sweep) * r / 60)));
+          const coords = [];
+          for (let i = 0; i <= arcN; i++) {
+            const ang = phi0 + sweep * (i / arcN);
+            coords.push([p0Lng + (ccx + Math.cos(ang) * r) / mLng, p0Lat + (ccy + Math.sin(ang) * r) / mLat]);
+          }
+          const qx = ccx + Math.cos(phiQ) * r, qy = ccy + Math.sin(phiQ) * r;
+          const sx = vx - qx, sy = vy - qy;
+          const sLen = Math.hypot(sx, sy) || 1;
+          const lineN = Math.max(1, Math.min(12, Math.ceil(sLen / 120)));
+          for (let i = 1; i <= lineN; i++) {
+            const f = i / lineN;
+            coords.push([p0Lng + (qx + sx * f) / mLng, p0Lat + (qy + sy * f) / mLat]);
+          }
+          return {
+            coords,
+            lengthKm: (r * Math.abs(sweep) + sLen) / 1000,
+            minRadiusM: Math.round(Math.min(2000, r)),
+            startDir: [tx, ty],
+            endDir: [sx / sLen, sy / sLen]
+          };
+        }
+      }
+    }
     const cx = nx * R;
     const cy = ny * R;
     const startAngle = Math.atan2(-cy, -cx);

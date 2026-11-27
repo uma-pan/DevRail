@@ -285,12 +285,30 @@ window.RAIL_LAYERS = (() => {
         type: 'circle',
         source: 'station-zones',
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 12, 14, 38],
+          // 駅の利用人口が増えるほど円が大きくなる（r は app.js 側で人口から計算）
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, ['*', ['coalesce', ['get', 'r'], 24], 0.5], 14, ['*', ['coalesce', ['get', 'r'], 24], 1.6]],
           'circle-color': ['get', 'color'],
           'circle-opacity': 0.22,
           'circle-stroke-color': ['get', 'color'],
           'circle-stroke-width': 1.2,
           'circle-stroke-opacity': 0.55
+        }
+      });
+    }
+
+    // 4a. 路線ができて新しく住み始めた人の家（駅のまわりに少しずつ増える）
+    if (!map.getSource('growth-buildings')) {
+      map.addSource('growth-buildings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'growth-buildings-3d',
+        type: 'fill-extrusion',
+        source: 'growth-buildings',
+        minzoom: 12.5,
+        paint: {
+          'fill-extrusion-color': ['get', 'color'],
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.9
         }
       });
     }
@@ -307,6 +325,40 @@ window.RAIL_LAYERS = (() => {
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': 0,
           'fill-extrusion-opacity': 0.92
+        }
+      });
+    }
+
+    // 4b. 開発施設の目印（引いた地図でも何を建てたか分かるように）
+    if (!map.getSource('dev-markers')) {
+      map.addSource('dev-markers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'dev-markers-dot',
+        type: 'circle',
+        source: 'dev-markers',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 9],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': ['case', ['==', ['get', 'building'], true], '#475569', '#ffffff'],
+          'circle-stroke-width': 2,
+          'circle-opacity': ['case', ['==', ['get', 'building'], true], 0.55, 1]
+        }
+      });
+      map.addLayer({
+        id: 'dev-markers-label',
+        type: 'symbol',
+        source: 'dev-markers',
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 11,
+          'text-offset': [0, 1.1],
+          'text-anchor': 'top',
+          'text-allow-overlap': false
+        },
+        paint: {
+          'text-color': '#1e1b4b',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1.6
         }
       });
     }

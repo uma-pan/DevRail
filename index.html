@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>沿線デベロッパー TOKYO WEST — 実在2.5Dマップ私鉄沿線開発シミュレーション</title>
+  <title>沿線デベロッパー — 実在の地図で私鉄と沿線の街をつくるゲーム</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -196,7 +196,7 @@
       color: #f8fafc;
       font-size: 12px;
       padding: 6px 12px;
-      border-radius: 999px;
+      border-radius: 14px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.35);
       animation: fadeSlide 0.2s ease-out;
     }
@@ -235,23 +235,24 @@
     <!-- 上部ステータスHUD（モバイルは省スペース2段、PCは1段） -->
     <header class="bg-slate-900/95 border-b border-slate-700/60 px-2.5 md:px-4 py-1.5 md:py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-4 shrink-0 z-30">
       <div class="flex items-center justify-between md:justify-start gap-2 md:gap-4 min-w-0">
-        <div class="hidden md:flex items-center gap-2 pr-3 border-r border-slate-700/80 shrink-0">
+        <div class="hidden lg:flex items-center gap-2 pr-3 border-r border-slate-700/80 shrink-0">
           <span class="text-base font-extrabold tracking-tight text-white">沿線デベロッパー</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">JAPAN</span>
         </div>
         <div class="flex items-baseline gap-2 md:gap-3.5 min-w-0">
-          <span id="hud-date" class="text-[11px] md:text-base font-bold text-sky-300 tracking-wide shrink-0">2026年4月</span>
-          <span id="hud-funds" class="text-xs md:text-lg font-extrabold text-emerald-400 tabular-nums shrink-0">2000.0億円</span>
-          <span id="hud-pop" class="text-[10px] md:text-sm font-semibold text-slate-200 tabular-nums truncate">沿線 0.0万人</span>
+          <span id="hud-date" class="text-[11px] md:text-base font-bold text-sky-300 tracking-wide shrink-0 whitespace-nowrap">2026年4月</span>
+          <span id="hud-funds" class="text-xs md:text-lg font-extrabold text-emerald-400 tabular-nums shrink-0 whitespace-nowrap">700.0億円</span>
+          <span id="hud-pop" class="text-[10px] md:text-sm font-semibold text-slate-200 tabular-nums truncate min-w-0">沿線 0.0万人</span>
         </div>
         <div class="flex md:hidden items-center gap-1 shrink-0">
           <button id="btn-speed-0-m" data-proxy="btn-speed-0" class="speed-btn-proxy px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer">Ⅱ</button>
           <button id="btn-speed-1-m" data-proxy="btn-speed-1" class="speed-btn-proxy active px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-600 text-white border border-sky-500 cursor-pointer">1x</button>
           <button id="btn-speed-3-m" data-proxy="btn-speed-3" class="speed-btn-proxy px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer">3x</button>
+          <button id="btn-mute-m" data-proxy="btn-mute" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer">音ON</button>
           <button id="btn-help-m" data-proxy="btn-help" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-sky-300 border border-slate-700 cursor-pointer">?</button>
         </div>
       </div>
-      <div class="flex items-center justify-between md:justify-end gap-1.5 md:gap-3">
+      <div class="flex items-center justify-between md:justify-end gap-1.5 md:gap-3 shrink-0">
         <div class="flex items-center gap-1.5 min-w-0">
           <select id="area-select" class="text-[11px] md:text-xs px-1.5 py-0.5 md:py-1 rounded bg-slate-800 text-slate-200 border border-slate-600 cursor-pointer max-w-[155px] md:max-w-none truncate" title="日本全国エリア移動">
             <option value="tokyo_west">東京西南部（初期）</option>
@@ -262,7 +263,7 @@
             <option value="sapporo">札幌圏</option>
             <option value="sendai">仙台圏</option>
           </select>
-          <button id="btn-load-osm-rail" class="text-[10px] md:text-xs px-2 py-0.5 md:py-1 rounded bg-sky-600/25 hover:bg-sky-600/40 text-sky-300 border border-sky-500/50 font-bold cursor-pointer shrink-0" title="表示中エリア（最大約200km四方）の全駅を軽量一括読込">広域の駅を読込</button>
+          <button id="btn-load-osm-rail" class="text-[10px] md:text-xs px-2 py-0.5 md:py-1 rounded bg-sky-600/25 hover:bg-sky-600/40 text-sky-300 border border-sky-500/50 font-bold cursor-pointer shrink-0" title="表示中エリア（最大約200km四方）の全駅を軽量一括読込">駅を読込</button>
         </div>
         <div class="hidden md:flex items-center gap-1.5 shrink-0">
           <button id="btn-speed-0" class="speed-btn px-3 py-1.5 rounded text-sm font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer" title="一時停止 (Space)">Ⅱ</button>
@@ -315,8 +316,8 @@
 
       <!-- 左下：選択地点のミニ情報チップ -->
       <div id="map-info-chip" class="absolute bottom-2 left-2 bg-white/95 border border-slate-300/90 px-2.5 py-1.5 rounded-xl text-[11px] max-w-[74%] shadow-md z-20 text-slate-800">
-        <div class="font-extrabold text-slate-900" id="chip-title">多摩川新線 運行中</div>
-        <div class="text-slate-600 text-[10px] mt-0.5" id="chip-sub">実在地図上の駅や街をタップして確認・延伸</div>
+        <div class="font-extrabold text-slate-900" id="chip-title">新しい路線をつくろう</div>
+        <div class="text-slate-600 text-[10px] mt-0.5" id="chip-sub">「線路を引く」で線路を引いてから、線路の上に駅を置きます</div>
       </div>
 
       <!-- 右下：Subway Builder風ミニ凡例 -->
@@ -360,17 +361,19 @@
     <div id="help-modal" class="hidden absolute inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-4">
       <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm md:max-w-md w-full p-4 md:p-5 shadow-2xl max-h-[85%] overflow-y-auto">
         <div class="flex items-center justify-between mb-2.5">
-          <h2 class="text-sm md:text-base font-extrabold text-sky-300">沿線デベロッパー TOKYO WEST</h2>
+          <h2 class="text-sm md:text-base font-extrabold text-sky-300">沿線デベロッパー</h2>
           <button id="btn-close-help" class="text-slate-400 hover:text-white text-base font-bold px-2 cursor-pointer">✕</button>
         </div>
         <p class="text-xs md:text-sm text-slate-300 leading-relaxed mb-3">
-          実在の東京西南部3Dベクトル地図（OpenFreeMap）と東京都統計（2026年推計）の実人口データの上で、ゼロから私鉄路線を敷設し沿線の街を育てる2.5Dシミュレーションです。
+          実在の地図（OpenFreeMap）と自治体の人口データの上で、私鉄の路線をゼロから引き、駅のまわりの街を育てるゲームです。最初は東京西南部から始まり、上のメニューで全国の都市圏に移れます。
         </p>
         <ul class="text-xs md:text-sm text-slate-300 space-y-2 list-disc pl-4 mb-4">
           <li><strong class="text-white">実在マップ操作</strong>: ドラッグで移動、ホイール／ピンチや＋/−で拡大すると実在の建物が3D立体表示されます。右ドラッグ（スマホは二本指）で回転・傾きも調整可能です。</li>
-          <li><strong class="text-white">ゼロから路線敷設＆直通</strong>: 地図上の好きな場所をクリック／タップして1駅目から新線を敷設できます。既存路線駅（二子玉川・調布・登戸・新百合ヶ丘・多摩センター・町田など）付近に繋ぐと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
+          <li><strong class="text-white">線路と駅</strong>: 「線路を引く」で始点と経由点を順にクリックして線路を引き、「駅を設置」で線路の上に駅を置きます。2駅で開業です。既存の駅（調布・登戸・新百合ヶ丘など）の近くに駅を置くと<strong class="text-amber-300">直通運転協定</strong>を結べます。</li>
+          <li><strong class="text-white">街が育つ</strong>: 開業した時点で路線を使うのは駅のまわりの住民の一部だけです。都心に早く着けるほど、また開発するほど、住む人が増えて駅のまわりに家が建っていきます。</li>
           <li><strong class="text-white">種別・待避線</strong>: 急行や特急の停車駅をタップで設定。途中に<strong class="text-sky-300">2面4線（待避線）</strong>があると速達効果がフル発揮され、遠方の都心体感時間が大幅短縮します。</li>
-          <li><strong class="text-white">沿線開発・土地区画整理</strong>: 実在道路や新設道路に沿って角度を自動整列させながら施設を建設できます。駅前ロータリー・新設道路・グリッド区画整理で既存道路を作り変えることも可能です。</li>
+          <li><strong class="text-white">沿線開発</strong>: マンションや商業ビルを道路沿いに建てられます。完成までに数か月かかり、完成すると住民や買い物客が増えます。駅前ロータリーや区画整理で道路を作り変えることもできます。</li>
+          <li><strong class="text-white">資金と目標</strong>: 元手は700億円です。足りなければ借入もできますが、資金が −300億円を下回ると経営破綻です。「経営・統計」の目標を達成すると補助金が出ます。</li>
         </ul>
         <div class="flex gap-2">
           <button id="btn-show-tutorial" class="flex-1 py-2 md:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-sky-300 font-bold text-xs md:text-sm cursor-pointer">チュートリアル表示</button>
